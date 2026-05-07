@@ -1,0 +1,30 @@
+{
+  "provider": "openai",
+  "openai": {
+    "api_key": "YOUR_API_KEY_HERE",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat"
+  },
+  "anthropic": {
+    "api_key": "",
+    "model": "claude-sonnet-4-6"
+  },
+  "image": {
+    "provider": "sd_webui",
+    "sd_webui": {
+      "base_url": "http://127.0.0.1:7860",
+      "default_prompt": "masterpiece, best quality, highly detailed",
+      "default_negative_prompt": "nsfw, low quality, distorted, deformed, blurry, bad anatomy",
+      "negative_prompt": "",
+      "steps": 20,
+      "width": 512,
+      "height": 512,
+      "cfg_scale": 7.0
+    }
+  },
+  "ui": {
+    "theme": "dracula",
+    "max_tokens": 4096,
+    "temperature": 0.7
+  }
+}
