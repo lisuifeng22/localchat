@@ -4,7 +4,232 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Local AI Chat</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js">
+// SD_TXT2IMG_SCRIPT_START
+function sdShowError(msg) {
+  if (typeof showError === 'function') showError(msg);
+  else alert(msg);
+}
+
+function intVal(id, fallback = null) {
+  const el = document.getElementById(id);
+  const v = el ? el.value : '';
+  if (v === '' || v == null) return fallback;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
+function floatVal(id, fallback = null) {
+  const el = document.getElementById(id);
+  const v = el ? el.value : '';
+  if (v === '' || v == null) return fallback;
+  const n = parseFloat(v);
+  return Number.isNaN(n) ? fallback : n;
+}
+
+function setSelectOptions(id, items, selectedValue = '', prependNone = false, noneLabel = 'None') {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  let list = Array.isArray(items) ? [...items] : [];
+
+  if (prependNone && !list.includes('None')) {
+    list.unshift('None');
+  }
+
+  if (selectedValue && !list.includes(selectedValue)) {
+    list.unshift(selectedValue);
+  }
+
+  el.innerHTML = '';
+
+  if (!list.length) {
+    const op = document.createElement('option');
+    op.value = '';
+    op.textContent = '无可用数据';
+    el.appendChild(op);
+    return;
+  }
+
+  list.forEach(item => {
+    const op = document.createElement('option');
+    op.value = item;
+    op.textContent = item || noneLabel;
+    if (item === selectedValue) op.selected = true;
+    el.appendChild(op);
+  });
+}
+
+function onProviderChange() {
+  const provider = document.getElementById('selProvider')?.value || 'openai';
+  const openai = document.getElementById('openaiSettings');
+  const anthropic = document.getElementById('anthropicSettings');
+  if (openai) openai.style.display = provider === 'anthropic' ? 'none' : '';
+  if (anthropic) anthropic.style.display = provider === 'anthropic' ? '' : 'none';
+}
+
+function onTtsProviderChange() {
+  const provider = document.getElementById('selTtsProvider')?.value || 'local';
+  const volc = document.getElementById('volcengineSettings');
+  if (volc) volc.style.display = provider === 'volcengine' ? '' : 'none';
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('show');
+}
+
+async function showSettings() {
+  try {
+    const cfg = await api('GET', '/api/config');
+    let meta = { models: [], vaes: ['None'], samplers: ['DPM++ 2M'], schedulers: ['Automatic'] };
+
+    try {
+      meta = await api('GET', '/api/sd/meta');
+    } catch (e) {
+      console.warn('加载 SD 元数据失败：', e);
+    }
+
+    const setVal = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value ?? '';
+    };
+
+    setVal('selProvider', cfg.provider || 'openai');
+    setVal('inputKey', cfg.openai?.api_key || '');
+    setVal('inputEndpoint', cfg.openai?.base_url || '');
+    setVal('inputModel', cfg.openai?.model || '');
+    setVal('inputAnthropicKey', cfg.anthropic?.api_key || '');
+    setVal('inputAnthropicModel', cfg.anthropic?.model || '');
+    setVal('inputTemp', cfg.temperature ?? 0.7);
+    setVal('inputDefaultPrompt', cfg.default_prompt || '');
+    setVal('inputDefaultNegPrompt', cfg.default_negative_prompt || '');
+
+    const img = cfg.image || {};
+    setSelectOptions('selSdModel', meta.models || [], img.sd_model_checkpoint || '');
+    setSelectOptions('selSdVae', meta.vaes || ['None'], img.sd_vae || 'None', true);
+    setSelectOptions('selSampler', meta.samplers || ['DPM++ 2M'], img.sampler_name || 'DPM++ 2M');
+
+    const schedulers = ['Automatic', ...((meta.schedulers || []).filter(x => x && x !== 'Automatic'))];
+    setSelectOptions('selScheduler', schedulers, img.scheduler || 'Automatic');
+
+    setVal('inputClipSkip', img.clip_skip ?? 1);
+    setVal('inputImageSteps', img.steps ?? 20);
+    setVal('inputImageCfgScale', img.cfg_scale ?? 7);
+    setVal('inputImageWidth', img.width ?? 512);
+    setVal('inputImageHeight', img.height ?? 512);
+    setVal('inputImageBatchCount', img.n_iter ?? 1);
+    setVal('inputImageBatchSize', img.batch_size ?? 1);
+    setVal('inputRefinerCheckpoint', img.refiner_checkpoint || '');
+    setVal('inputRefinerSwitchAt', img.refiner_switch_at ?? 0.8);
+
+    const hires = document.getElementById('chkHiresFix');
+    if (hires) hires.checked = !!img.enable_hr;
+
+    setVal('selTtsProvider', cfg.voice?.tts_provider || 'local');
+    setVal('selSttProvider', cfg.voice?.stt_provider || 'local');
+    setVal('inputVolcApiKey', cfg.voice?.volcengine?.api_key || '');
+    setVal('inputVolcResourceId', cfg.voice?.volcengine?.resource_id || 'auto');
+    setVal('inputVolcVoiceType', cfg.voice?.volcengine?.voice_type || 'zh_female_vv_uranus_bigtts');
+
+    onProviderChange();
+    onTtsProviderChange();
+
+    document.getElementById('settingsModal')?.classList.add('show');
+  } catch (e) {
+    sdShowError(`加载设置失败：${e.message}`);
+  }
+}
+
+async function saveSettings() {
+  try {
+    const provider = document.getElementById('selProvider')?.value || 'openai';
+
+    const payload = {
+      provider,
+      temperature: floatVal('inputTemp', 0.7),
+      default_prompt: document.getElementById('inputDefaultPrompt')?.value.trim() || '',
+      default_negative_prompt: document.getElementById('inputDefaultNegPrompt')?.value.trim() || '',
+
+      sampler_name: document.getElementById('selSampler')?.value || 'DPM++ 2M',
+      scheduler: document.getElementById('selScheduler')?.value || 'Automatic',
+      image_steps: intVal('inputImageSteps', 20),
+      image_width: intVal('inputImageWidth', 512),
+      image_height: intVal('inputImageHeight', 512),
+      image_cfg_scale: floatVal('inputImageCfgScale', 7),
+      image_batch_size: intVal('inputImageBatchSize', 1),
+      image_n_iter: intVal('inputImageBatchCount', 1),
+      image_enable_hr: !!document.getElementById('chkHiresFix')?.checked,
+      image_refiner_checkpoint: document.getElementById('inputRefinerCheckpoint')?.value.trim() || '',
+      image_refiner_switch_at: floatVal('inputRefinerSwitchAt', 0.8),
+      sd_model_checkpoint: document.getElementById('selSdModel')?.value || '',
+      sd_vae: document.getElementById('selSdVae')?.value || 'None',
+      clip_skip: intVal('inputClipSkip', 1),
+
+      tts_provider: document.getElementById('selTtsProvider')?.value || 'local',
+      stt_provider: document.getElementById('selSttProvider')?.value || 'local',
+      volcengine_api_key: document.getElementById('inputVolcApiKey')?.value || '',
+      volcengine_resource_id: document.getElementById('inputVolcResourceId')?.value || '',
+      volcengine_voice_type: document.getElementById('inputVolcVoiceType')?.value || '',
+    };
+
+    if (provider === 'anthropic') {
+      payload.api_key = document.getElementById('inputAnthropicKey')?.value || '';
+      payload.model = document.getElementById('inputAnthropicModel')?.value.trim() || '';
+    } else {
+      payload.api_key = document.getElementById('inputKey')?.value || '';
+      payload.base_url = document.getElementById('inputEndpoint')?.value.trim() || '';
+      payload.model = document.getElementById('inputModel')?.value.trim() || '';
+    }
+
+    await api('POST', '/api/config', payload);
+
+    closeModal('settingsModal');
+    if (typeof loadStatus === 'function') await loadStatus();
+  } catch (e) {
+    sdShowError(`保存设置失败：${e.message}`);
+  }
+}
+
+async function drawImage() {
+  const input = document.getElementById('chatInput');
+  const drawBtn = document.getElementById('drawBtn');
+  const text = input?.value.trim();
+
+  if (!text || streaming) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  appendMessage('user', `生图：${text}`, false);
+  appendMessage('assistant', '正在生成图片...', true);
+
+  streaming = true;
+  if (drawBtn) drawBtn.disabled = true;
+
+  try {
+    const data = await api('POST', '/api/draw', { prompt: text });
+    const imgUrl = data.url || data.image || '';
+    let content = `![Generated Image](${imgUrl})\n\n**Prompt:** ${data.prompt || text}`;
+    if (data.enhanced_prompt && data.enhanced_prompt !== data.prompt) {
+      content += `\n\n> ✨ ${data.enhanced_prompt}`;
+    }
+    appendMessage('assistant', content, true);
+    finalizeStreaming();
+  } catch (e) {
+    finalizeStreaming();
+    sdShowError(e.message);
+  } finally {
+    streaming = false;
+    if (drawBtn) drawBtn.disabled = false;
+    if (typeof loadSessions === 'function') await loadSessions();
+    if (typeof loadStatus === 'function') await loadStatus();
+    input?.focus();
+  }
+}
+// SD_TXT2IMG_SCRIPT_END
+
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <style>
@@ -1565,6 +1790,113 @@ function showError(msg) {
   scrollToBottom();
 }
 
+// ── Settings Modal ─────────────────────────────────────────────────────────
+async function showSettings() {
+  document.getElementById('settingsModal').classList.add('show');
+  try {
+    const cfg = await api('GET', '/api/config');
+    document.getElementById('selProvider').value = cfg.provider;
+    onProviderChange();
+
+    if (cfg.openai) {
+      document.getElementById('inputKey').value = cfg.openai.api_key || '';
+      document.getElementById('inputEndpoint').value = cfg.openai.base_url || '';
+      document.getElementById('inputModel').value = cfg.openai.model || '';
+    }
+    if (cfg.anthropic) {
+      document.getElementById('inputAnthropicKey').value = cfg.anthropic.api_key || '';
+      document.getElementById('inputAnthropicModel').value = cfg.anthropic.model || '';
+    }
+    document.getElementById('inputTemp').value = cfg.temperature;
+    document.getElementById('inputDefaultPrompt').value = cfg.default_prompt || '';
+    document.getElementById('inputDefaultNegPrompt').value = cfg.default_negative_prompt || '';
+
+    // Voice config
+    if (cfg.voice) {
+      document.getElementById('selTtsProvider').value = cfg.voice.tts_provider || 'local';
+      document.getElementById('selSttProvider').value = cfg.voice.stt_provider || 'local';
+      onTtsProviderChange();
+      if (cfg.voice.volcengine) {
+        document.getElementById('inputVolcApiKey').value = cfg.voice.volcengine.api_key || '';
+        document.getElementById('inputVolcResourceId').value = cfg.voice.volcengine.resource_id || 'seed-tts-2.0';
+        document.getElementById('inputVolcVoiceType').value = cfg.voice.volcengine.voice_type || 'zh_female_cancan_mars_bigtts';
+      }
+    }
+  } catch (e) { console.error('load config:', e); }
+}
+
+function onProviderChange() {
+  const v = document.getElementById('selProvider').value;
+  document.getElementById('openaiSettings').style.display = v === 'openai' ? '' : 'none';
+  document.getElementById('anthropicSettings').style.display = v === 'anthropic' ? '' : 'none';
+}
+
+function onTtsProviderChange() {
+  const v = document.getElementById('selTtsProvider').value;
+  document.getElementById('volcengineSettings').style.display = v === 'volcengine' ? '' : 'none';
+}
+
+async function saveSettings() {
+  const provider = document.getElementById('selProvider').value;
+  const update = { provider };
+
+  if (provider === 'openai') {
+    const key = document.getElementById('inputKey').value.trim();
+    if (key) update.api_key = key;
+    const ep = document.getElementById('inputEndpoint').value.trim();
+    if (ep) update.base_url = ep;
+    const model = document.getElementById('inputModel').value.trim();
+    if (model) update.model = model;
+  } else {
+    const key = document.getElementById('inputAnthropicKey').value.trim();
+    if (key) update.api_key = key;
+    const model = document.getElementById('inputAnthropicModel').value.trim();
+    if (model) update.model = model;
+  }
+
+  const temp = parseFloat(document.getElementById('inputTemp').value);
+  if (!isNaN(temp) && temp >= 0 && temp <= 2) update.temperature = temp;
+
+  const defaultPrompt = document.getElementById('inputDefaultPrompt').value.trim();
+  if (defaultPrompt) update.default_prompt = defaultPrompt;
+
+  const defaultNegPrompt = document.getElementById('inputDefaultNegPrompt').value.trim();
+  if (defaultNegPrompt) update.default_negative_prompt = defaultNegPrompt;
+
+  // Voice settings
+  update.tts_provider = document.getElementById('selTtsProvider').value;
+  update.stt_provider = document.getElementById('selSttProvider').value;
+  if (volcAppId) update.volcengine_app_id = volcAppId;
+  if (volcToken) update.volcengine_access_token = volcToken;
+  const volcApiKey = document.getElementById('inputVolcApiKey').value.trim();
+  if (volcApiKey) update.volcengine_api_key = volcApiKey;
+  update.volcengine_resource_id = document.getElementById('inputVolcResourceId').value.trim() || 'seed-tts-2.0';
+  update.volcengine_voice_type = document.getElementById('inputVolcVoiceType').value;
+
+  try {
+    await api('POST', '/api/config', update);
+    // Save system prompt
+    const sp = document.getElementById('inputSystemPrompt').value.trim();
+    if (sp) {
+      document.getElementById('inputSystemPrompt').dataset.userSet = 'true';
+      await api('POST', '/api/sessions/system', { prompt: sp });
+    }
+    closeModal('settingsModal');
+    await loadStatus();
+  } catch (e) { alert('保存失败: ' + e.message); }
+}
+
+async function restartServer() {
+  if (!confirm('确认重启服务？未保存的设置会丢失。')) return;
+  try {
+    await api('POST', '/api/restart');
+  } catch (e) {
+    // Server will restart, so request will fail - that's expected
+  }
+  // Wait a moment then reload
+  await new Promise(r => setTimeout(r, 1500));
+  window.location.reload();
+}
 
 // ── Character Import/Export ────────────────────────────────────────────────
 
@@ -2137,29 +2469,6 @@ function escapeHtml(s) {
     select.value = finalValue;
   }
 
-  function populateSelectOptions(id, items, selectedValue = '', prependNone = false) {
-    const el = $(id);
-    if (!el) return;
-    let list = Array.isArray(items) ? [...items] : [];
-    if (prependNone && !list.includes('None')) list.unshift('None');
-    if (selectedValue && !list.includes(selectedValue)) list.unshift(selectedValue);
-    el.innerHTML = '';
-    if (!list.length) {
-      const op = document.createElement('option');
-      op.value = '';
-      op.textContent = '无可用数据';
-      el.appendChild(op);
-      return;
-    }
-    list.forEach(item => {
-      const op = document.createElement('option');
-      op.value = item;
-      op.textContent = item;
-      if (item === selectedValue) op.selected = true;
-      el.appendChild(op);
-    });
-  }
-
   window.onProviderChange = function onProviderChange() {
     const provider = safeValue('selProvider', 'openai');
     const openaiBox = $('openaiSettings');
@@ -2192,31 +2501,6 @@ function escapeHtml(s) {
       setValue('inputDefaultPrompt', cfg.default_prompt || '');
       setValue('inputDefaultNegPrompt', cfg.default_negative_prompt || '');
 
-      // SD settings
-      let sdMeta = { models: [], vaes: ['None'], samplers: ['DPM++ 2M'], schedulers: ['Automatic'] };
-      try {
-        sdMeta = await api('GET', '/api/sd/meta');
-      } catch (e) {
-        console.warn('加载 SD 元数据失败：', e);
-      }
-      const img = cfg.image || {};
-      populateSelectOptions('selSdModel', sdMeta.models || [], img.sd_model_checkpoint || '');
-      populateSelectOptions('selSdVae', sdMeta.vaes || ['None'], img.sd_vae || 'None', true);
-      populateSelectOptions('selSampler', sdMeta.samplers || ['DPM++ 2M'], img.sampler_name || 'DPM++ 2M');
-      const schedulers = ['Automatic', ...((sdMeta.schedulers || []).filter(x => x && x !== 'Automatic'))];
-      populateSelectOptions('selScheduler', schedulers, img.scheduler || 'Automatic');
-      setValue('inputClipSkip', img.clip_skip ?? 1);
-      setValue('inputImageSteps', img.steps ?? 20);
-      setValue('inputImageCfgScale', img.cfg_scale ?? 7);
-      setValue('inputImageWidth', img.width ?? 512);
-      setValue('inputImageHeight', img.height ?? 512);
-      setValue('inputImageBatchCount', img.n_iter ?? 1);
-      setValue('inputImageBatchSize', img.batch_size ?? 1);
-      setValue('inputRefinerCheckpoint', img.refiner_checkpoint || '');
-      setValue('inputRefinerSwitchAt', img.refiner_switch_at ?? 0.8);
-      const hires = $('chkHiresFix');
-      if (hires) hires.checked = !!img.enable_hr;
-
       const voice = cfg.voice || {};
       const volc = voice.volcengine || {};
       setSelectValue('selTtsProvider', voice.tts_provider || 'local');
@@ -2242,20 +2526,6 @@ function escapeHtml(s) {
       temperature: Number(safeValue('inputTemp', '0.7')),
       default_prompt: safeValue('inputDefaultPrompt'),
       default_negative_prompt: safeValue('inputDefaultNegPrompt'),
-      sampler_name: safeValue('selSampler', 'DPM++ 2M'),
-      scheduler: safeValue('selScheduler', 'Automatic'),
-      image_steps: parseInt(safeValue('inputImageSteps', '20')) || 20,
-      image_width: parseInt(safeValue('inputImageWidth', '512')) || 512,
-      image_height: parseInt(safeValue('inputImageHeight', '512')) || 512,
-      image_cfg_scale: parseFloat(safeValue('inputImageCfgScale', '7')) || 7,
-      image_batch_size: parseInt(safeValue('inputImageBatchSize', '1')) || 1,
-      image_n_iter: parseInt(safeValue('inputImageBatchCount', '1')) || 1,
-      image_enable_hr: !!$('chkHiresFix')?.checked,
-      image_refiner_checkpoint: safeValue('inputRefinerCheckpoint'),
-      image_refiner_switch_at: parseFloat(safeValue('inputRefinerSwitchAt', '0.8')) || 0.8,
-      sd_model_checkpoint: safeValue('selSdModel'),
-      sd_vae: safeValue('selSdVae', 'None'),
-      clip_skip: parseInt(safeValue('inputClipSkip', '1')) || 1,
       tts_provider: safeValue('selTtsProvider', 'local'),
       stt_provider: safeValue('selSttProvider', 'local'),
       volcengine_api_key: safeValue('inputVolcApiKey'),

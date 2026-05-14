@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-"""Image generation provider — connects to Stable Diffusion WebUI / AUTOMATIC1111."""
-
 from abc import ABC, abstractmethod
 from base64 import b64decode
 
@@ -8,17 +6,12 @@ import httpx
 
 
 class ImageProvider(ABC):
-    """Abstract base for image generation backends."""
-
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> bytes:
-        """Generate an image from a text prompt. Returns raw PNG bytes."""
         ...
 
 
 class SDWebUIProvider(ImageProvider):
-    """Generates images via AUTOMATIC1111 Stable Diffusion WebUI API."""
-
     def __init__(self, config: dict):
         self.base_url = config.get("base_url", "http://127.0.0.1:7860").rstrip("/")
         self.default_params = {
@@ -57,12 +50,12 @@ class SDWebUIProvider(ImageProvider):
     async def list_vaes(self):
         try:
             data = await self._get_json("/sdapi/v1/sd-vae")
-            items = []
+            out = []
             for item in data:
                 name = item.get("model_name") or item.get("name")
                 if name:
-                    items.append(name)
-            return items or ["None"]
+                    out.append(name)
+            return out or ["None"]
         except Exception:
             return ["None"]
 
@@ -134,14 +127,16 @@ class SDWebUIProvider(ImageProvider):
             images = data.get("images", [])
             if not images:
                 raise RuntimeError("SD WebUI returned no images")
+
             raw = images[0]
             if isinstance(raw, dict):
                 raw = raw.get("data", "")
             return b64decode(raw)
+
         except httpx.ConnectError:
             raise ConnectionError(
                 f"Cannot connect to Stable Diffusion WebUI at {self.base_url}. "
-                "Make sure AUTOMATIC1111 is running with --api flag."
+                f"Make sure AUTOMATIC1111 is running with --api flag."
             )
         except httpx.TimeoutException:
             raise TimeoutError("Image generation timed out after 120s. Try reducing steps or resolution.")

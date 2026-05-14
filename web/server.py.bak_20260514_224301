@@ -99,16 +99,6 @@ class DrawRequest(BaseModel):
     height: Optional[int] = None
     steps: Optional[int] = None
     cfg_scale: Optional[float] = None
-    sampler_name: Optional[str] = None
-    scheduler: Optional[str] = None
-    batch_size: Optional[int] = None
-    n_iter: Optional[int] = None
-    enable_hr: Optional[bool] = None
-    refiner_checkpoint: Optional[str] = None
-    refiner_switch_at: Optional[float] = None
-    sd_model_checkpoint: Optional[str] = None
-    sd_vae: Optional[str] = None
-    clip_skip: Optional[int] = None
 
 
 class ConfigUpdate(BaseModel):
@@ -119,20 +109,6 @@ class ConfigUpdate(BaseModel):
     temperature: Optional[float] = None
     default_prompt: Optional[str] = None
     default_negative_prompt: Optional[str] = None
-    sampler_name: Optional[str] = None
-    scheduler: Optional[str] = None
-    image_steps: Optional[int] = None
-    image_width: Optional[int] = None
-    image_height: Optional[int] = None
-    image_cfg_scale: Optional[float] = None
-    image_batch_size: Optional[int] = None
-    image_n_iter: Optional[int] = None
-    image_enable_hr: Optional[bool] = None
-    image_refiner_checkpoint: Optional[str] = None
-    image_refiner_switch_at: Optional[float] = None
-    sd_model_checkpoint: Optional[str] = None
-    sd_vae: Optional[str] = None
-    clip_skip: Optional[int] = None
     tts_provider: Optional[str] = None
     stt_provider: Optional[str] = None
     volcengine_api_key: Optional[str] = None
@@ -203,8 +179,6 @@ async def get_config():
     pcfg = config.get_provider_config()
     vcfg = config.get_voice_config()
     vol = config.volcengine_config
-    img = config.get_image_provider_config()
-
     return {
         "provider": config.provider,
         "openai": {
@@ -219,22 +193,6 @@ async def get_config():
         "temperature": config.temperature,
         "default_prompt": config.image_default_prompt,
         "default_negative_prompt": config.image_default_negative_prompt,
-        "image": {
-            "sampler_name": img.get("sampler_name", "DPM++ 2M"),
-            "scheduler": img.get("scheduler", "Automatic"),
-            "steps": img.get("steps", 20),
-            "width": img.get("width", 512),
-            "height": img.get("height", 512),
-            "cfg_scale": img.get("cfg_scale", 7.0),
-            "batch_size": img.get("batch_size", 1),
-            "n_iter": img.get("n_iter", 1),
-            "enable_hr": img.get("enable_hr", False),
-            "refiner_checkpoint": img.get("refiner_checkpoint", ""),
-            "refiner_switch_at": img.get("refiner_switch_at", 0.8),
-            "sd_model_checkpoint": img.get("sd_model_checkpoint", ""),
-            "sd_vae": img.get("sd_vae", "None"),
-            "clip_skip": img.get("clip_skip", 1),
-        },
         "voice": {
             "tts_provider": vcfg.get("tts_provider", "local"),
             "stt_provider": vcfg.get("stt_provider", "local"),
@@ -256,10 +214,8 @@ async def update_config(update: ConfigUpdate):
 
     if update.api_key and not _is_masked(update.api_key):
         config.get_provider_config()["api_key"] = update.api_key
-
     if update.base_url:
         config.get_provider_config()["base_url"] = update.base_url
-
     if update.model:
         cfg = config.get_provider_config()
         cfg["model"] = update.model
@@ -269,41 +225,10 @@ async def update_config(update: ConfigUpdate):
 
     if update.temperature is not None:
         config.data.setdefault("ui", {})["temperature"] = update.temperature
-
-    img_cfg = config.data.setdefault("image", {}).setdefault("sd_webui", {})
-
     if update.default_prompt is not None:
-        img_cfg["default_prompt"] = update.default_prompt
+        config.data.setdefault("image", {}).setdefault("sd_webui", {})["default_prompt"] = update.default_prompt
     if update.default_negative_prompt is not None:
-        img_cfg["default_negative_prompt"] = update.default_negative_prompt
-    if update.sampler_name is not None:
-        img_cfg["sampler_name"] = update.sampler_name
-    if update.scheduler is not None:
-        img_cfg["scheduler"] = update.scheduler
-    if update.image_steps is not None:
-        img_cfg["steps"] = update.image_steps
-    if update.image_width is not None:
-        img_cfg["width"] = update.image_width
-    if update.image_height is not None:
-        img_cfg["height"] = update.image_height
-    if update.image_cfg_scale is not None:
-        img_cfg["cfg_scale"] = update.image_cfg_scale
-    if update.image_batch_size is not None:
-        img_cfg["batch_size"] = update.image_batch_size
-    if update.image_n_iter is not None:
-        img_cfg["n_iter"] = update.image_n_iter
-    if update.image_enable_hr is not None:
-        img_cfg["enable_hr"] = update.image_enable_hr
-    if update.image_refiner_checkpoint is not None:
-        img_cfg["refiner_checkpoint"] = update.image_refiner_checkpoint
-    if update.image_refiner_switch_at is not None:
-        img_cfg["refiner_switch_at"] = update.image_refiner_switch_at
-    if update.sd_model_checkpoint is not None:
-        img_cfg["sd_model_checkpoint"] = update.sd_model_checkpoint
-    if update.sd_vae is not None:
-        img_cfg["sd_vae"] = update.sd_vae
-    if update.clip_skip is not None:
-        img_cfg["clip_skip"] = update.clip_skip
+        config.data.setdefault("image", {}).setdefault("sd_webui", {})["default_negative_prompt"] = update.default_negative_prompt
 
     voice_cfg = config.data.setdefault("voice", {})
     vol_cfg = voice_cfg.setdefault("volcengine", {})
@@ -325,14 +250,10 @@ async def update_config(update: ConfigUpdate):
 
     config.save()
 
-    global provider, audio_processor, image_provider
+    global provider, audio_processor
     provider = None
-    image_provider = None
-
     get_provider()
-    get_image_provider()
     audio_processor = AudioProcessor(voice_config=config.get_voice_config())
-
     return {"ok": True}
 
 
@@ -340,38 +261,6 @@ async def update_config(update: ConfigUpdate):
 async def restart_server():
     subprocess.Popen([sys.executable, *sys.argv])
     raise SystemExit(0)
-
-
-@app.get("/api/sd/meta")
-async def get_sd_meta():
-    p = get_image_provider()
-
-    try:
-        models = await p.list_models()
-    except Exception:
-        models = []
-
-    try:
-        vaes = await p.list_vaes()
-    except Exception:
-        vaes = ["None"]
-
-    try:
-        samplers = await p.list_samplers()
-    except Exception:
-        samplers = ["DPM++ 2M"]
-
-    try:
-        schedulers = await p.list_schedulers()
-    except Exception:
-        schedulers = ["Automatic"]
-
-    return {
-        "models": models,
-        "vaes": vaes,
-        "samplers": samplers,
-        "schedulers": schedulers,
-    }
 
 
 @app.get("/api/models")
@@ -714,12 +603,9 @@ async def chat(body: ChatRequest):
 @app.post("/api/draw")
 async def draw_image(body: DrawRequest):
     prompt = body.prompt.strip()
-
     if not prompt:
         raise HTTPException(400, "Empty prompt")
-
     kwargs = {}
-
     if body.negative_prompt is not None:
         kwargs["negative_prompt"] = body.negative_prompt
     if body.width is not None:
@@ -730,27 +616,6 @@ async def draw_image(body: DrawRequest):
         kwargs["steps"] = body.steps
     if body.cfg_scale is not None:
         kwargs["cfg_scale"] = body.cfg_scale
-    if body.sampler_name is not None:
-        kwargs["sampler_name"] = body.sampler_name
-    if body.scheduler is not None:
-        kwargs["scheduler"] = body.scheduler
-    if body.batch_size is not None:
-        kwargs["batch_size"] = body.batch_size
-    if body.n_iter is not None:
-        kwargs["n_iter"] = body.n_iter
-    if body.enable_hr is not None:
-        kwargs["enable_hr"] = body.enable_hr
-    if body.refiner_checkpoint is not None:
-        kwargs["refiner_checkpoint"] = body.refiner_checkpoint
-    if body.refiner_switch_at is not None:
-        kwargs["refiner_switch_at"] = body.refiner_switch_at
-    if body.sd_model_checkpoint is not None:
-        kwargs["sd_model_checkpoint"] = body.sd_model_checkpoint
-    if body.sd_vae is not None:
-        kwargs["sd_vae"] = body.sd_vae
-    if body.clip_skip is not None:
-        kwargs["clip_skip"] = body.clip_skip
-
     return await _generate_image(prompt, **kwargs)
 
 

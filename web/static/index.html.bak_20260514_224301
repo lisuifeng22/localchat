@@ -382,30 +382,6 @@
   0%, 100% { height: 4px; }
   50% { height: 16px; }
 }
-
-/* SD txt2img settings */
-.sd-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.sd-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.sd-field-full {
-  grid-column: 1 / -1;
-}
-.sd-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sd-inline input[type="checkbox"] {
-  width: auto;
-}
-
 </style>
 </head>
 <body>
@@ -510,86 +486,6 @@
 
     <label>默认反向提示词（每次生图自动附加）</label>
     <textarea id="inputDefaultNegPrompt" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;outline:none;resize:vertical" placeholder="nsfw, low quality, distorted, deformed, blurry, bad anatomy"></textarea>
-<!-- SD_TXT2IMG_SETTINGS_START -->
-<hr style="border-color:var(--border);margin:16px 0">
-
-<h3 style="font-size:14px;color:var(--text);margin-bottom:8px">Stable Diffusion 默认参数</h3>
-
-<div class="sd-grid">
-  <div class="sd-field sd-field-full">
-    <label>Stable Diffusion 模型</label>
-    <select id="selSdModel"></select>
-  </div>
-
-  <div class="sd-field">
-    <label>外挂 VAE 模型</label>
-    <select id="selSdVae"></select>
-  </div>
-
-  <div class="sd-field">
-    <label>CLIP 终止层数</label>
-    <input type="number" id="inputClipSkip" min="1" max="12" step="1" value="1">
-  </div>
-
-  <div class="sd-field">
-    <label>采样方法 (Sampler)</label>
-    <select id="selSampler"></select>
-  </div>
-
-  <div class="sd-field">
-    <label>调度类型 (Schedule type)</label>
-    <select id="selScheduler"></select>
-  </div>
-
-  <div class="sd-field">
-    <label>迭代步数 (Steps)</label>
-    <input type="number" id="inputImageSteps" min="1" step="1" value="20">
-  </div>
-
-  <div class="sd-field">
-    <label>提示词引导系数 (CFG Scale)</label>
-    <input type="number" id="inputImageCfgScale" min="1" step="0.5" value="7">
-  </div>
-
-  <div class="sd-field">
-    <label>宽度</label>
-    <input type="number" id="inputImageWidth" min="64" step="64" value="512">
-  </div>
-
-  <div class="sd-field">
-    <label>高度</label>
-    <input type="number" id="inputImageHeight" min="64" step="64" value="512">
-  </div>
-
-  <div class="sd-field">
-    <label>总批次数</label>
-    <input type="number" id="inputImageBatchCount" min="1" step="1" value="1">
-  </div>
-
-  <div class="sd-field">
-    <label>单批数量</label>
-    <input type="number" id="inputImageBatchSize" min="1" step="1" value="1">
-  </div>
-
-  <div class="sd-field sd-field-full">
-    <label class="sd-inline">
-      <input type="checkbox" id="chkHiresFix">
-      <span>高分辨率修复 (Hires. fix)</span>
-    </label>
-  </div>
-
-  <div class="sd-field">
-    <label>Refiner 模型（可留空）</label>
-    <input type="text" id="inputRefinerCheckpoint" placeholder="例如：sd_xl_refiner_1.0.safetensors">
-  </div>
-
-  <div class="sd-field">
-    <label>Refiner 切换点</label>
-    <input type="number" id="inputRefinerSwitchAt" min="0" max="1" step="0.05" value="0.8">
-  </div>
-</div>
-<!-- SD_TXT2IMG_SETTINGS_END -->
-
 
     <hr style="border-color:var(--border);margin:16px 0">
 
@@ -1565,6 +1461,113 @@ function showError(msg) {
   scrollToBottom();
 }
 
+// ── Settings Modal ─────────────────────────────────────────────────────────
+async function showSettings() {
+  document.getElementById('settingsModal').classList.add('show');
+  try {
+    const cfg = await api('GET', '/api/config');
+    document.getElementById('selProvider').value = cfg.provider;
+    onProviderChange();
+
+    if (cfg.openai) {
+      document.getElementById('inputKey').value = cfg.openai.api_key || '';
+      document.getElementById('inputEndpoint').value = cfg.openai.base_url || '';
+      document.getElementById('inputModel').value = cfg.openai.model || '';
+    }
+    if (cfg.anthropic) {
+      document.getElementById('inputAnthropicKey').value = cfg.anthropic.api_key || '';
+      document.getElementById('inputAnthropicModel').value = cfg.anthropic.model || '';
+    }
+    document.getElementById('inputTemp').value = cfg.temperature;
+    document.getElementById('inputDefaultPrompt').value = cfg.default_prompt || '';
+    document.getElementById('inputDefaultNegPrompt').value = cfg.default_negative_prompt || '';
+
+    // Voice config
+    if (cfg.voice) {
+      document.getElementById('selTtsProvider').value = cfg.voice.tts_provider || 'local';
+      document.getElementById('selSttProvider').value = cfg.voice.stt_provider || 'local';
+      onTtsProviderChange();
+      if (cfg.voice.volcengine) {
+        document.getElementById('inputVolcApiKey').value = cfg.voice.volcengine.api_key || '';
+        document.getElementById('inputVolcResourceId').value = cfg.voice.volcengine.resource_id || 'seed-tts-2.0';
+        document.getElementById('inputVolcVoiceType').value = cfg.voice.volcengine.voice_type || 'zh_female_cancan_mars_bigtts';
+      }
+    }
+  } catch (e) { console.error('load config:', e); }
+}
+
+function onProviderChange() {
+  const v = document.getElementById('selProvider').value;
+  document.getElementById('openaiSettings').style.display = v === 'openai' ? '' : 'none';
+  document.getElementById('anthropicSettings').style.display = v === 'anthropic' ? '' : 'none';
+}
+
+function onTtsProviderChange() {
+  const v = document.getElementById('selTtsProvider').value;
+  document.getElementById('volcengineSettings').style.display = v === 'volcengine' ? '' : 'none';
+}
+
+async function saveSettings() {
+  const provider = document.getElementById('selProvider').value;
+  const update = { provider };
+
+  if (provider === 'openai') {
+    const key = document.getElementById('inputKey').value.trim();
+    if (key) update.api_key = key;
+    const ep = document.getElementById('inputEndpoint').value.trim();
+    if (ep) update.base_url = ep;
+    const model = document.getElementById('inputModel').value.trim();
+    if (model) update.model = model;
+  } else {
+    const key = document.getElementById('inputAnthropicKey').value.trim();
+    if (key) update.api_key = key;
+    const model = document.getElementById('inputAnthropicModel').value.trim();
+    if (model) update.model = model;
+  }
+
+  const temp = parseFloat(document.getElementById('inputTemp').value);
+  if (!isNaN(temp) && temp >= 0 && temp <= 2) update.temperature = temp;
+
+  const defaultPrompt = document.getElementById('inputDefaultPrompt').value.trim();
+  if (defaultPrompt) update.default_prompt = defaultPrompt;
+
+  const defaultNegPrompt = document.getElementById('inputDefaultNegPrompt').value.trim();
+  if (defaultNegPrompt) update.default_negative_prompt = defaultNegPrompt;
+
+  // Voice settings
+  update.tts_provider = document.getElementById('selTtsProvider').value;
+  update.stt_provider = document.getElementById('selSttProvider').value;
+  if (volcAppId) update.volcengine_app_id = volcAppId;
+  if (volcToken) update.volcengine_access_token = volcToken;
+  const volcApiKey = document.getElementById('inputVolcApiKey').value.trim();
+  if (volcApiKey) update.volcengine_api_key = volcApiKey;
+  update.volcengine_resource_id = document.getElementById('inputVolcResourceId').value.trim() || 'seed-tts-2.0';
+  update.volcengine_voice_type = document.getElementById('inputVolcVoiceType').value;
+
+  try {
+    await api('POST', '/api/config', update);
+    // Save system prompt
+    const sp = document.getElementById('inputSystemPrompt').value.trim();
+    if (sp) {
+      document.getElementById('inputSystemPrompt').dataset.userSet = 'true';
+      await api('POST', '/api/sessions/system', { prompt: sp });
+    }
+    closeModal('settingsModal');
+    await loadStatus();
+  } catch (e) { alert('保存失败: ' + e.message); }
+}
+
+async function restartServer() {
+  if (!confirm('确认重启服务？未保存的设置会丢失。')) return;
+  try {
+    await api('POST', '/api/restart');
+  } catch (e) {
+    // Server will restart, so request will fail - that's expected
+  }
+  // Wait a moment then reload
+  await new Promise(r => setTimeout(r, 1500));
+  window.location.reload();
+}
 
 // ── Character Import/Export ────────────────────────────────────────────────
 
@@ -2137,29 +2140,6 @@ function escapeHtml(s) {
     select.value = finalValue;
   }
 
-  function populateSelectOptions(id, items, selectedValue = '', prependNone = false) {
-    const el = $(id);
-    if (!el) return;
-    let list = Array.isArray(items) ? [...items] : [];
-    if (prependNone && !list.includes('None')) list.unshift('None');
-    if (selectedValue && !list.includes(selectedValue)) list.unshift(selectedValue);
-    el.innerHTML = '';
-    if (!list.length) {
-      const op = document.createElement('option');
-      op.value = '';
-      op.textContent = '无可用数据';
-      el.appendChild(op);
-      return;
-    }
-    list.forEach(item => {
-      const op = document.createElement('option');
-      op.value = item;
-      op.textContent = item;
-      if (item === selectedValue) op.selected = true;
-      el.appendChild(op);
-    });
-  }
-
   window.onProviderChange = function onProviderChange() {
     const provider = safeValue('selProvider', 'openai');
     const openaiBox = $('openaiSettings');
@@ -2192,31 +2172,6 @@ function escapeHtml(s) {
       setValue('inputDefaultPrompt', cfg.default_prompt || '');
       setValue('inputDefaultNegPrompt', cfg.default_negative_prompt || '');
 
-      // SD settings
-      let sdMeta = { models: [], vaes: ['None'], samplers: ['DPM++ 2M'], schedulers: ['Automatic'] };
-      try {
-        sdMeta = await api('GET', '/api/sd/meta');
-      } catch (e) {
-        console.warn('加载 SD 元数据失败：', e);
-      }
-      const img = cfg.image || {};
-      populateSelectOptions('selSdModel', sdMeta.models || [], img.sd_model_checkpoint || '');
-      populateSelectOptions('selSdVae', sdMeta.vaes || ['None'], img.sd_vae || 'None', true);
-      populateSelectOptions('selSampler', sdMeta.samplers || ['DPM++ 2M'], img.sampler_name || 'DPM++ 2M');
-      const schedulers = ['Automatic', ...((sdMeta.schedulers || []).filter(x => x && x !== 'Automatic'))];
-      populateSelectOptions('selScheduler', schedulers, img.scheduler || 'Automatic');
-      setValue('inputClipSkip', img.clip_skip ?? 1);
-      setValue('inputImageSteps', img.steps ?? 20);
-      setValue('inputImageCfgScale', img.cfg_scale ?? 7);
-      setValue('inputImageWidth', img.width ?? 512);
-      setValue('inputImageHeight', img.height ?? 512);
-      setValue('inputImageBatchCount', img.n_iter ?? 1);
-      setValue('inputImageBatchSize', img.batch_size ?? 1);
-      setValue('inputRefinerCheckpoint', img.refiner_checkpoint || '');
-      setValue('inputRefinerSwitchAt', img.refiner_switch_at ?? 0.8);
-      const hires = $('chkHiresFix');
-      if (hires) hires.checked = !!img.enable_hr;
-
       const voice = cfg.voice || {};
       const volc = voice.volcengine || {};
       setSelectValue('selTtsProvider', voice.tts_provider || 'local');
@@ -2242,20 +2197,6 @@ function escapeHtml(s) {
       temperature: Number(safeValue('inputTemp', '0.7')),
       default_prompt: safeValue('inputDefaultPrompt'),
       default_negative_prompt: safeValue('inputDefaultNegPrompt'),
-      sampler_name: safeValue('selSampler', 'DPM++ 2M'),
-      scheduler: safeValue('selScheduler', 'Automatic'),
-      image_steps: parseInt(safeValue('inputImageSteps', '20')) || 20,
-      image_width: parseInt(safeValue('inputImageWidth', '512')) || 512,
-      image_height: parseInt(safeValue('inputImageHeight', '512')) || 512,
-      image_cfg_scale: parseFloat(safeValue('inputImageCfgScale', '7')) || 7,
-      image_batch_size: parseInt(safeValue('inputImageBatchSize', '1')) || 1,
-      image_n_iter: parseInt(safeValue('inputImageBatchCount', '1')) || 1,
-      image_enable_hr: !!$('chkHiresFix')?.checked,
-      image_refiner_checkpoint: safeValue('inputRefinerCheckpoint'),
-      image_refiner_switch_at: parseFloat(safeValue('inputRefinerSwitchAt', '0.8')) || 0.8,
-      sd_model_checkpoint: safeValue('selSdModel'),
-      sd_vae: safeValue('selSdVae', 'None'),
-      clip_skip: parseInt(safeValue('inputClipSkip', '1')) || 1,
       tts_provider: safeValue('selTtsProvider', 'local'),
       stt_provider: safeValue('selSttProvider', 'local'),
       volcengine_api_key: safeValue('inputVolcApiKey'),
