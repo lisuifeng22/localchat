@@ -16,6 +16,7 @@ class CharacterCard:
         self.speaking_style = data.get("speaking_style", "")
         self.greeting = data.get("greeting", "")
         self.avatar = data.get("avatar", "🎭")
+        self.tts_voice: Optional[str] = data.get("tts_voice")
 
     @classmethod
     def load(cls, path: Path) -> Optional["CharacterCard"]:
@@ -26,7 +27,7 @@ class CharacterCard:
             return None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.name,
             "description": self.description,
             "personality": self.personality,
@@ -35,6 +36,9 @@ class CharacterCard:
             "greeting": self.greeting,
             "avatar": self.avatar,
         }
+        if self.tts_voice is not None:
+            d["tts_voice"] = self.tts_voice
+        return d
 
     def build_system_prompt(self) -> str:
         """Build the system prompt injection for this character."""

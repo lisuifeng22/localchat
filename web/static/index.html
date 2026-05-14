@@ -177,6 +177,11 @@
   }
   .msg .msg-actions button:hover { color: var(--text); background: var(--border); }
 
+  /* TTS button always visible */
+  .msg .msg-actions .tts-btn { opacity: 1; }
+  .msg:not(:hover) .msg-actions .tts-btn { opacity: .5; }
+  .msg .msg-actions .tts-btn:hover { opacity: 1; }
+
   /* Inline edit */
   .msg .edit-box { display: flex; flex-direction: column; gap: 6px; }
   .msg .edit-box textarea {
@@ -228,6 +233,22 @@
   }
   .input-area .btn-draw:hover { opacity: .85; }
   .input-area .btn-draw:disabled { opacity: .4; cursor: not-allowed; }
+  .input-area .btn-mic {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 14px; cursor: pointer; font-size: 16px; font-weight: 600;
+    height: 42px; white-space: nowrap; transition: .15s; line-height: 1;
+  }
+  .input-area .btn-mic:hover { background: var(--border); color: var(--primary); }
+  .input-area .btn-mic.recording {
+    background: var(--red); color: #fff; border-color: var(--red);
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+  .input-area .btn-mic:disabled { opacity: .4; cursor: not-allowed; }
+  .input-area .btn-mic .rec-timer { font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(247, 118, 142, .4); }
+    50% { box-shadow: 0 0 0 8px rgba(247, 118, 142, 0); }
+  }
 
   /* Footer */
   .footer {
@@ -290,6 +311,77 @@
     .msg { max-width: 95%; }
     .modal { width: 94vw; margin: 0 10px; }
   }
+
+/* Voice Mode */
+#voiceToggleBtn { font-size: 16px; }
+#voiceToggleBtn.active { color: var(--primary); background: rgba(122,162,247,.12); }
+
+.voice-ptt-wrap { display: none; flex: 1; justify-content: center; align-items: center; }
+.input-area.voice-mode .voice-ptt-wrap { display: flex; }
+.input-area.voice-mode textarea { display: none; }
+.input-area.voice-mode .btn-send { display: none; }
+.input-area.voice-mode .btn-draw { display: none; }
+.input-area.voice-mode .btn-mic { display: none; }
+
+.voice-ptt-btn {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: var(--surface2); border: 2px solid var(--border);
+  color: var(--text); font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all .2s;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; user-select: none;
+}
+.voice-ptt-btn:hover { border-color: var(--primary); }
+.voice-ptt-btn:active { transform: scale(.95); }
+.voice-ptt-btn.recording {
+  background: var(--red); border-color: var(--red); color: #fff;
+  animation: ptt-pulse 1s ease-in-out infinite;
+}
+.voice-ptt-btn .ptt-icon { font-size: 28px; }
+.voice-ptt-btn .ptt-label { font-size: 11px; }
+.voice-ptt-btn .ptt-timer { font-size: 13px; display: none; font-variant-numeric: tabular-nums; }
+.voice-ptt-btn.recording .ptt-label { display: none; }
+.voice-ptt-btn.recording .ptt-timer { display: block; }
+
+@keyframes ptt-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(247,118,142,.4); }
+  50% { box-shadow: 0 0 0 16px rgba(247,118,142,0); }
+}
+
+/* Voice Bubble */
+.msg.voice .voice-bubble {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-radius: var(--radius); cursor: pointer; transition: .15s;
+  min-width: 120px;
+}
+.msg.user.voice .voice-bubble {
+  background: var(--user-bubble); border-bottom-right-radius: 4px;
+  flex-direction: row-reverse;
+}
+.msg.assistant.voice .voice-bubble {
+  background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px;
+}
+.msg.voice .voice-bubble:hover { filter: brightness(1.15); }
+.msg.voice .voice-icon { font-size: 18px; }
+.msg.voice .duration { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-dim); min-width: 35px; }
+.msg.voice .play-btn { font-size: 16px; transition: transform .15s; }
+.msg.voice .play-btn:hover { transform: scale(1.2); }
+
+.voice-bubble .waveform { display: flex; align-items: center; gap: 2px; height: 20px; }
+.voice-bubble .waveform span {
+  display: block; width: 3px; background: var(--primary); border-radius: 2px;
+  height: 4px; transition: height .2s;
+}
+.voice-bubble.playing .waveform span { animation: wave 1s ease-in-out infinite; }
+.voice-bubble.playing .waveform span:nth-child(1) { animation-delay: 0s; }
+.voice-bubble.playing .waveform span:nth-child(2) { animation-delay: .1s; }
+.voice-bubble.playing .waveform span:nth-child(3) { animation-delay: .2s; }
+.voice-bubble.playing .waveform span:nth-child(4) { animation-delay: .3s; }
+.voice-bubble.playing .waveform span:nth-child(5) { animation-delay: .4s; }
+@keyframes wave {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
 </style>
 </head>
 <body>
@@ -299,6 +391,7 @@
   <span class="logo">🧠 Local AI Chat</span>
   <span class="model-badge" id="modelBadge">—</span>
   <span class="char-badge" id="charBadge"></span>
+  <button class="btn" id="voiceToggleBtn" onclick="toggleVoiceMode()" title="语音通话模式">🎙️</button>
   <div class="spacer"></div>
   <button class="btn" onclick="showSettings()" title="设置">⚙️</button>
   <button class="btn" onclick="showCharacters()" title="角色卡">🎭</button>
@@ -326,8 +419,18 @@
     <div class="input-area">
       <textarea id="chatInput" rows="1" placeholder="输入消息..."
         onkeydown="handleInputKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="btn-mic" id="micBtn" onclick="toggleRecording()" title="语音输入">🎤</button>
       <button class="btn-draw" id="drawBtn" onclick="drawImage()">🎨 生图</button>
       <button class="btn-send" id="sendBtn" onclick="sendMessage()">发送</button>
+      <div class="voice-ptt-wrap" id="voicePttWrap">
+        <button class="voice-ptt-btn" id="voicePttBtn"
+          onmousedown="voicePttDown(event)" onmouseup="voicePttUp(event)" onmouseleave="voicePttUp(event)"
+          ontouchstart="voicePttDown(event)" ontouchend="voicePttUp(event)">
+          <span class="ptt-icon">🎤</span>
+          <span class="ptt-label">按住 说话</span>
+          <span class="ptt-timer" id="voicePttTimer">0s</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -442,6 +545,15 @@
     <label>开场白</label>
     <textarea id="ceGreeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;outline:none;resize:vertical" placeholder="加载角色时自动发送的第一句话"></textarea>
 
+    <label>语音音色</label>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="ceTtsVoice" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;outline:none">
+        <option value="">默认音色</option>
+      </select>
+      <button class="btn-secondary" onclick="previewTtsVoice()" style="font-size:12px;padding:4px 10px">🔈 试听</button>
+    </div>
+    <span class="hint">选择本地 OmniVoice 模型的音色。</span>
+
     <div class="btn-row" style="justify-content:space-between">
       <button class="btn-danger" id="ceDeleteBtn" onclick="deleteCharacter()" style="display:none">删除角色</button>
       <div>
@@ -457,6 +569,13 @@
 let streaming = false;
 let abortController = null;
 let currentMessages = [];
+let voiceMode = false;
+let voicePttRecording = false;
+let voicePttStartTime = 0;
+let voicePttTimer = null;
+let voicePttRecorder = null;
+let voicePttChunks = [];
+let currentVoiceEl = null;
 
 // ── API Helpers ────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -539,6 +658,8 @@ async function newSession() {
 
 async function switchSession(idx) {
   if (streaming) return;
+  if (voicePttRecording) return;
+  stopAudio();
   await api('POST', `/api/sessions/switch/${idx}`);
   await loadCurrentSession();
   await loadSessions();
@@ -638,6 +759,12 @@ function createMessageEl(role, content, isStreaming) {
     regenBtn.title = '重新生成回答';
     regenBtn.onclick = (e) => { e.stopPropagation(); regenerateMessage(div); };
     actions.appendChild(regenBtn);
+    const ttsBtn = document.createElement('button');
+    ttsBtn.className = 'tts-btn';
+    ttsBtn.textContent = '🔊';
+    ttsBtn.title = '语音播放';
+    ttsBtn.onclick = (e) => { e.stopPropagation(); playTTS(div); };
+    actions.appendChild(ttsBtn);
   }
   div.appendChild(actions);
 
@@ -680,6 +807,12 @@ function finalizeStreaming() {
       regenBtn.title = '重新生成回答';
       regenBtn.onclick = (e) => { e.stopPropagation(); regenerateMessage(last); };
       actions.appendChild(regenBtn);
+      const ttsBtn = document.createElement('button');
+      ttsBtn.className = 'tts-btn';
+      ttsBtn.textContent = '🔊';
+      ttsBtn.title = '语音播放';
+      ttsBtn.onclick = (e) => { e.stopPropagation(); playTTS(last); };
+      actions.appendChild(ttsBtn);
       last.appendChild(actions);
     }
   }
@@ -1046,6 +1179,153 @@ async function regenerateMessage(msgEl) {
   await loadStatus();
 }
 
+// ── Voice Recording ──────────────────────────────────────────────────────────
+let mediaRecorder = null;
+let recordingChunks = [];
+let recordingStartTime = 0;
+let recordingTimer = null;
+
+async function toggleRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecording();
+    return;
+  }
+  startRecording();
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    recordingChunks = [];
+    recordingStartTime = Date.now();
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordingChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+
+      const micBtn = document.getElementById('micBtn');
+      micBtn.classList.remove('recording');
+      micBtn.innerHTML = '🎤';
+      clearInterval(recordingTimer);
+
+      const blob = new Blob(recordingChunks, { type: 'audio/webm' });
+      await uploadSTT(blob);
+    };
+
+    mediaRecorder.start();
+    const micBtn = document.getElementById('micBtn');
+    micBtn.classList.add('recording');
+    micBtn.innerHTML = '⏺ <span class="rec-timer">0s</span>';
+
+    recordingTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+      const el = micBtn.querySelector('.rec-timer');
+      if (el) el.textContent = `${elapsed}s`;
+    }, 1000);
+  } catch (e) {
+    showError('麦克风访问失败: ' + e.message);
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+}
+
+async function uploadSTT(blob) {
+  const formData = new FormData();
+  formData.append('file', blob, 'recording.webm');
+  try {
+    const resp = await fetch('/api/stt', { method: 'POST', body: formData });
+    if (!resp.ok) {
+      const err = await resp.text();
+      showError('语音识别失败: ' + err.slice(0, 200));
+      return;
+    }
+    const result = await resp.json();
+    const input = document.getElementById('chatInput');
+    input.value = result.text;
+    autoResize(input);
+    input.focus();
+  } catch (e) {
+    showError('语音识别请求失败: ' + e.message);
+  }
+}
+
+// ── TTS Playback ─────────────────────────────────────────────────────────────
+let currentAudio = null;
+let currentTtsBtn = null;
+
+async function playTTS(msgEl) {
+  const bubble = msgEl.querySelector('.bubble');
+  const text = bubble.dataset.originalContent || bubble.textContent;
+  if (!text.trim()) return;
+
+  const ttsBtn = msgEl.querySelector('.tts-btn');
+  if (!ttsBtn) return;
+
+  // Toggle off if already playing
+  if (currentAudio && !currentAudio.paused && currentTtsBtn === ttsBtn) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+    ttsBtn.textContent = '🔊';
+    currentTtsBtn = null;
+    return;
+  }
+
+  try {
+    ttsBtn.textContent = '🔇';
+    currentTtsBtn = ttsBtn;
+
+    const resp = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, speed: 1.0 }),
+    });
+
+    if (!resp.ok) {
+      ttsBtn.textContent = '🔊';
+      currentTtsBtn = null;
+      const err = await resp.text();
+      showError('TTS 合成失败: ' + err.slice(0, 200));
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      ttsBtn.textContent = '🔊';
+      if (currentTtsBtn === ttsBtn) {
+        currentAudio = null;
+        currentTtsBtn = null;
+      }
+    };
+
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      ttsBtn.textContent = '🔊';
+      currentTtsBtn = null;
+      showError('音频播放失败');
+    };
+
+    await audio.play();
+  } catch (e) {
+    ttsBtn.textContent = '🔊';
+    currentTtsBtn = null;
+    showError('TTS 播放失败: ' + e.message);
+  }
+}
+
 // ── Image Drawing ─────────────────────────────────────────────────────────
 
 async function drawImage() {
@@ -1239,6 +1519,7 @@ async function handleCharImport(event) {
       backstory: data.backstory || '',
       speaking_style: data.speaking_style || '',
       greeting: data.greeting || '',
+      tts_seed: data.tts_seed || null,
     });
 
     // Refresh the character list
@@ -1295,7 +1576,31 @@ async function showCharacters() {
   } catch (e) { console.error('characters:', e); }
 }
 
+function stopAudio() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  if (currentTtsBtn) {
+    currentTtsBtn.textContent = '🔊';
+    currentTtsBtn = null;
+  }
+  if (currentVoiceEl) {
+    const vb = currentVoiceEl.querySelector('.voice-bubble');
+    if (vb) vb.classList.remove('playing');
+    const pb = currentVoiceEl.querySelector('.play-btn');
+    if (pb) pb.textContent = '▶️';
+    if (currentVoiceEl._audio) {
+      currentVoiceEl._audio.pause();
+      currentVoiceEl._audio.currentTime = 0;
+    }
+    currentVoiceEl = null;
+  }
+}
+
 async function loadCharacter(name) {
+  stopAudio();
   try {
     const result = await api('POST', `/api/characters/${encodeURIComponent(name)}/load`);
     currentMessages = [];
@@ -1318,6 +1623,7 @@ async function loadCharacter(name) {
 }
 
 async function stopCharacter() {
+  stopAudio();
   await api('POST', '/api/characters/stop');
   currentMessages = [];
   renderMessages([]);
@@ -1336,6 +1642,21 @@ async function editCharacter(name) {
   const title = document.getElementById('charEditorTitle');
   const delBtn = document.getElementById('ceDeleteBtn');
 
+  // Load voice list into dropdown
+  try {
+    const vr = await fetch('/api/tts-voices');
+    const vj = await vr.json();
+    const sel = document.getElementById('ceTtsVoice');
+    // Keep the "默认音色" option, add voice options
+    sel.innerHTML = '<option value="">默认音色</option>';
+    if (vj.voices) vj.voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    });
+  } catch (e) { console.error('Failed to load voices', e); }
+
   if (name) {
     title.textContent = `🎭 编辑角色`;
     delBtn.style.display = 'inline-block';
@@ -1351,18 +1672,44 @@ async function editCharacter(name) {
         document.getElementById('ceBackstory').value = char.details.backstory;
         document.getElementById('ceStyle').value = char.details.speaking_style;
         document.getElementById('ceGreeting').value = char.details.greeting;
+        document.getElementById('ceTtsVoice').value = char.details.tts_voice ?? '';
       }
     } catch (e) { console.error(e); }
   } else {
     title.textContent = '🎭 新建角色';
     delBtn.style.display = 'none';
     // Clear form
-    ['ceName','ceAvatar','ceDesc','cePersonality','ceBackstory','ceStyle','ceGreeting']
+    ['ceName','ceAvatar','ceDesc','cePersonality','ceBackstory','ceStyle','ceGreeting','ceTtsVoice']
       .forEach(id => document.getElementById(id).value = '');
     document.getElementById('ceAvatar').value = '🎭';
   }
   closeModal('charModal');
   document.getElementById('charEditorModal').classList.add('show');
+}
+
+async function previewTtsVoice() {
+  const name = document.getElementById('ceName').value.trim() || '角色';
+  const voiceVal = document.getElementById('ceTtsVoice').value;
+  const text = `你好，我是${name}，很高兴认识你。`;
+  try {
+    const resp = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        speed: 1.0,
+        voice: voiceVal || undefined,
+      }),
+    });
+    if (!resp.ok) { showError('试听失败'); return; }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => URL.revokeObjectURL(url);
+    await audio.play();
+  } catch (e) {
+    showError('试听失败: ' + e.message);
+  }
 }
 
 async function saveCharacter() {
@@ -1375,6 +1722,8 @@ async function saveCharacter() {
     speaking_style: document.getElementById('ceStyle').value.trim(),
     greeting: document.getElementById('ceGreeting').value.trim(),
   };
+  const voiceVal = document.getElementById('ceTtsVoice').value;
+  if (voiceVal) data.tts_voice = voiceVal;
   if (!data.name) { alert('请输入角色名'); return; }
 
   try {
@@ -1402,6 +1751,244 @@ async function deleteCharacter() {
 // ── Modal Helpers ──────────────────────────────────────────────────────────
 function closeModal(id) {
   document.getElementById(id).classList.remove('show');
+}
+
+// ── Voice Call Mode ─────────────────────────────────────────────────────────
+
+function toggleVoiceMode() {
+  voiceMode = !voiceMode;
+  const btn = document.getElementById('voiceToggleBtn');
+  const inputArea = document.querySelector('.input-area');
+  if (voiceMode) {
+    btn.classList.add('active');
+    inputArea.classList.add('voice-mode');
+    document.getElementById('footerMode').textContent = '🎙️ 语音通话';
+  } else {
+    btn.classList.remove('active');
+    inputArea.classList.remove('voice-mode');
+    updateFooterMode();
+    loadCurrentSession();
+  }
+}
+
+function createVoiceBubbleEl(role, text, duration) {
+  const div = document.createElement('div');
+  div.className = `msg ${role} voice`;
+  div.dataset.voiceText = text;
+  const label = document.createElement('div');
+  label.className = 'label';
+  if (role === 'assistant') {
+    const cb = document.getElementById('charBadge');
+    label.textContent = cb.style.display !== 'none' ? cb.dataset.name || 'AI' : 'AI';
+  } else {
+    label.textContent = '你';
+  }
+  div.appendChild(label);
+  const vb = document.createElement('div');
+  vb.className = 'voice-bubble';
+  const icon = document.createElement('span');
+  icon.className = 'voice-icon';
+  icon.textContent = role === 'user' ? '🎤' : '🔊';
+  vb.appendChild(icon);
+  if (role === 'assistant') {
+    const w = document.createElement('div');
+    w.className = 'waveform';
+    for (let i = 0; i < 5; i++) w.appendChild(document.createElement('span'));
+    vb.appendChild(w);
+  }
+  const dur = document.createElement('span');
+  dur.className = 'duration';
+  dur.textContent = duration ? formatDuration(duration) : '···';
+  vb.appendChild(dur);
+  const pb = document.createElement('span');
+  pb.className = 'play-btn';
+  pb.textContent = '▶️';
+  vb.appendChild(pb);
+  vb.onclick = () => playVoiceBubble(div);
+  div.appendChild(vb);
+  return div;
+}
+
+function appendVoiceBubble(role, text, duration) {
+  const c = document.getElementById('messages');
+  c.querySelector('.empty-state')?.remove();
+  const el = createVoiceBubbleEl(role, text, duration);
+  c.appendChild(el);
+  scrollToBottom();
+  return el;
+}
+
+function setBubbleVoiceAudio(el, url) {
+  const a = new Audio(url);
+  el._audio = a;
+  el._audioUrl = url;
+  a.addEventListener('loadedmetadata', () => {
+    const d = el.querySelector('.duration');
+    if (d) d.textContent = formatDuration(a.duration);
+  });
+  a.addEventListener('ended', () => {
+    el.querySelector('.voice-bubble')?.classList.remove('playing');
+    const pb = el.querySelector('.play-btn');
+    if (pb) pb.textContent = '▶️';
+    currentVoiceEl = null;
+  });
+}
+
+function playVoiceBubble(el) {
+  const vb = el.querySelector('.voice-bubble');
+  if (el._audio && !el._audio.paused) {
+    el._audio.pause();
+    el._audio.currentTime = 0;
+    vb?.classList.remove('playing');
+    const pb = el.querySelector('.play-btn');
+    if (pb) pb.textContent = '▶️';
+    currentVoiceEl = null;
+    return;
+  }
+  stopAudio();
+  if (el._audio) {
+    el._audio.currentTime = 0;
+    el._audio.play().catch(() => {});
+    vb?.classList.add('playing');
+    const pb = el.querySelector('.play-btn');
+    if (pb) pb.textContent = '⏸️';
+    currentVoiceEl = el;
+  }
+}
+
+function formatDuration(s) {
+  return Math.round(s) + 's';
+}
+
+// ── PTT Voice Recording ─────────────────────────────────────────────────────
+
+function voicePttDown(e) {
+  e.preventDefault();
+  if (voicePttRecording || streaming) return;
+  startVoicePttRecording();
+}
+
+function voicePttUp(e) {
+  e.preventDefault();
+  if (!voicePttRecording) return;
+  stopVoicePttRecording();
+}
+
+async function startVoicePttRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voicePttRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    voicePttChunks = [];
+    voicePttStartTime = Date.now();
+    voicePttRecording = true;
+    voicePttRecorder.ondataavailable = e => {
+      if (e.data.size > 0) voicePttChunks.push(e.data);
+    };
+    const btn = document.getElementById('voicePttBtn');
+    btn.classList.add('recording');
+    const t = document.getElementById('voicePttTimer');
+    t.style.display = 'block';
+    t.textContent = '0s';
+    voicePttTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - voicePttStartTime) / 1000);
+      document.getElementById('voicePttTimer').textContent = s + 's';
+      if (s >= 60) stopVoicePttRecording();
+    }, 200);
+    voicePttRecorder.start();
+  } catch (e) {
+    showError('麦克风访问失败: ' + e.message);
+  }
+}
+
+async function stopVoicePttRecording() {
+  if (!voicePttRecorder || voicePttRecorder.state !== 'recording') return;
+  voicePttRecording = false;
+  clearInterval(voicePttTimer);
+  const btn = document.getElementById('voicePttBtn');
+  btn.classList.remove('recording');
+  document.getElementById('voicePttTimer').style.display = 'none';
+  const userDuration = (Date.now() - voicePttStartTime) / 1000;
+
+  await new Promise(resolve => {
+    voicePttRecorder.onstop = async () => {
+      voicePttRecorder.stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(voicePttChunks, { type: 'audio/webm' });
+      const userAudioUrl = URL.createObjectURL(blob);
+      const fd = new FormData();
+      fd.append('file', blob, 'recording.webm');
+      try {
+        const r = await fetch('/api/stt', { method: 'POST', body: fd });
+        if (!r.ok) { showError('语音识别失败'); resolve(); return; }
+        const j = await r.json();
+        const text = (j.text || '').trim();
+        if (!text) { showError('未识别到语音'); resolve(); return; }
+        await sendVoiceMessage(text, userDuration, userAudioUrl);
+      } catch (e) {
+        showError('语音识别请求失败: ' + e.message);
+      }
+      resolve();
+    };
+    voicePttRecorder.stop();
+  });
+}
+
+async function sendVoiceMessage(text, userDuration, userAudioUrl) {
+  const userEl = appendVoiceBubble('user', text, userDuration);
+  if (userAudioUrl) setBubbleVoiceAudio(userEl, userAudioUrl);
+  streaming = true;
+  abortController = new AbortController();
+  let fullResponse = '';
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+      signal: abortController.signal,
+    });
+    if (!resp.ok) { streaming = false; showError('聊天请求失败'); return; }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const p = JSON.parse(data);
+          if (p.text) fullResponse += p.text;
+        } catch (e) { /* skip */ }
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') showError(e.message);
+  }
+  streaming = false;
+  abortController = null;
+  if (fullResponse) {
+    const aiEl = appendVoiceBubble('assistant', fullResponse, null);
+    try {
+      const ttsResp = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: fullResponse, speed: 1.0 }),
+      });
+      if (ttsResp.ok) {
+        const blob = await ttsResp.blob();
+        const url = URL.createObjectURL(blob);
+        setBubbleVoiceAudio(aiEl, url);
+        setTimeout(() => { if (voiceMode) playVoiceBubble(aiEl); }, 500);
+      }
+    } catch (e) { showError('语音合成失败'); }
+  }
+  await loadSessions();
+  await loadStatus();
+  document.getElementById('sendBtn').disabled = false;
 }
 
 function escapeHtml(s) {

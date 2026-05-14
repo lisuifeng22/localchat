@@ -65,6 +65,7 @@ CMD_HELP = """\
   [green]/character <name>[/]  Load a character card
   [green]/character_stop[/]    Remove active character (return to normal mode)
   [green]/character_show[/]    Show active character card details
+  [green]/chat2card <file>[/]  Analyze chat log -> generate character card
 
 [dim]Tip: Type your message and press Enter to send.[/]
 """
@@ -522,6 +523,22 @@ async def handle_command(cmd: str) -> bool:
             console.print(Panel(card.display_card(), title="当前角色卡", border_style="yellow"))
         else:
             console.print("[yellow]No active character.[/]")
+
+    elif verb == "/chat2card":
+        if not arg:
+            console.print("[yellow]用法: /chat2card <聊天记录.txt>[/]")
+            console.print("[dim]示例: /chat2card 张三.txt[/]")
+        else:
+            from tools.chat_to_character import analyze, save_card
+            console.print("[cyan]正在分析聊天记录...[/]")
+            result = analyze(arg)
+            if result:
+                console.print("\n[green]📋 生成的角色卡:[/]")
+                console.print(json.dumps(result, indent=2, ensure_ascii=False))
+                path = save_card(result)
+                console.print(f"[green]✅ 已保存: {path}[/]")
+            else:
+                console.print("[red]❌ 生成失败[/]")
 
     else:
         console.print(f"[red]Unknown command: {verb}. Type /help for commands.[/]")

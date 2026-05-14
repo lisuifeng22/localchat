@@ -21,8 +21,10 @@ from providers.openai import OpenAIProvider
 from providers.anthropic import AnthropicProvider
 from providers.image import SDWebUIProvider
 from providers.base import ChatMessage
+from audio_processor import AudioProcessor, VOICE_LIST
 from hashlib import md5 as hash_md5
 from datetime import datetime
+from fastapi import UploadFile, File
 
 # ── App State ──────────────────────────────────────────────────────────────
 
@@ -31,6 +33,7 @@ sessions = SessionManager()
 char_mgr = CharacterManager()
 provider: Optional[OpenAIProvider | AnthropicProvider] = None
 image_provider: Optional[SDWebUIProvider] = None
+audio_processor = AudioProcessor()
 
 app = FastAPI(title="Local AI Chat")
 
@@ -94,6 +97,7 @@ class CharacterData(BaseModel):
     backstory: str = ""
     speaking_style: str = ""
     greeting: str = ""
+    tts_voice: Optional[str] = None  # voice name for TTS (from VOICE_LIST)
 
 
 # ── API Routes ─────────────────────────────────────────────────────────────
@@ -370,6 +374,7 @@ async def list_characters():
                 "backstory": card.backstory,
                 "speaking_style": card.speaking_style,
                 "greeting": card.greeting,
+                "tts_voice": card.tts_voice,
             }
         })
     return {"characters": chars, "active": char_mgr.active_name}
@@ -602,6 +607,54 @@ async def draw_image(body: DrawRequest):
     return await _generate_image(prompt, **kwargs)
 
 
+class TTSRequest(BaseModel):
+    text: str
+    speed: float = 1.0
+    voice: Optional[str] = None  # override voice name, otherwise derived from character
+
+
+# ── Voice Routes ─────────────────────────────────────────
+
+@app.get("/api/tts-voices")
+async def list_tts_voices():
+    """Return available TTS voice names from the local OmniVoice model."""
+    return {"voices": VOICE_LIST}
+
+
+@app.post("/api/stt")
+async def speech_to_text(file: UploadFile = File(...)):
+    """STT: upload audio -> recognized text."""
+    audio_bytes = await file.read()
+    result = audio_processor.transcribe(audio_bytes)
+    return result
+
+
+@app.post("/api/tts")
+async def text_to_speech(body: TTSRequest):
+    """TTS: text -> synthesized speech audio."""
+    if not body.text.strip():
+        raise HTTPException(400, "Empty text")
+
+    # Derive voice name from active character for consistent per-character timbre
+    char_name = sessions.character
+    if body.voice is not None:
+        voice = body.voice  # explicit override (e.g. preview)
+    elif char_name and char_mgr.active and char_mgr.active.tts_voice is not None:
+        voice = char_mgr.active.tts_voice  # voice from character card
+    else:
+        voice = None  # use default
+
+    wav_bytes = audio_processor.synthesize(body.text, body.speed, voice=voice)
+
+    from fastapi.responses import Response
+    return Response(
+        content=wav_bytes,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": f"inline; filename=tts_{hash_md5(body.text.encode()).hexdigest()[:12]}.wav",
+        },
+    )
+
 # ── Static Files ───────────────────────────────────────────────────────────
 
 static_dir = Path(__file__).parent / "static"
@@ -622,7 +675,7 @@ app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 def run():
     import uvicorn
-    print(f"🌐 Local AI Chat Web UI")
+    print(f"[LocalChat] Local AI Chat Web UI")
     print(f"   Open http://localhost:8000 in your browser")
     print(f"   Press Ctrl+C to stop")
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
