@@ -504,8 +504,13 @@
     </select>
 
     <div id="volcengineSettings" style="display:none">
-<label>API Key（新版控制台）</label>
-      <input type="password" id="inputVolcApiKey" placeholder="输入新版控制台 API Key">
+      <label>App ID（旧版控制台）</label>
+      <input type="text" id="inputVolcAppId" placeholder="输入 App ID">
+      <label>Access Key（旧版控制台）</label>
+      <input type="password" id="inputVolcToken" placeholder="输入 Access Key">
+      <div style="text-align:center;color:var(--text-dim);font-size:12px;margin:8px 0">— 或者 —</div>
+      <label>API Key（新版控制台）</label>
+      <input type="password" id="inputVolcApiKey" placeholder="输入 API Key">
 
       <label>Resource ID</label>
       <input type="text" id="inputVolcResourceId" value="seed-tts-2.0" placeholder="seed-tts-2.0">
@@ -1488,6 +1493,8 @@ async function showSettings() {
       document.getElementById('selSttProvider').value = cfg.voice.stt_provider || 'local';
       onTtsProviderChange();
       if (cfg.voice.volcengine) {
+        document.getElementById('inputVolcAppId').value = cfg.voice.volcengine.app_id || '';
+        document.getElementById('inputVolcToken').value = cfg.voice.volcengine.access_token || '';
         document.getElementById('inputVolcApiKey').value = cfg.voice.volcengine.api_key || '';
         document.getElementById('inputVolcResourceId').value = cfg.voice.volcengine.resource_id || 'seed-tts-2.0';
         document.getElementById('inputVolcVoiceType').value = cfg.voice.volcengine.voice_type || 'zh_female_cancan_mars_bigtts';
@@ -1537,7 +1544,9 @@ async function saveSettings() {
   // Voice settings
   update.tts_provider = document.getElementById('selTtsProvider').value;
   update.stt_provider = document.getElementById('selSttProvider').value;
+  const volcAppId = document.getElementById('inputVolcAppId').value.trim();
   if (volcAppId) update.volcengine_app_id = volcAppId;
+  const volcToken = document.getElementById('inputVolcToken').value.trim();
   if (volcToken) update.volcengine_access_token = volcToken;
   const volcApiKey = document.getElementById('inputVolcApiKey').value.trim();
   if (volcApiKey) update.volcengine_api_key = volcApiKey;

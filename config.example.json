@@ -22,6 +22,18 @@
       "cfg_scale": 7.0
     }
   },
+  "voice": {
+    "tts_provider": "volcengine",
+    "stt_provider": "local",
+    "volcengine": {
+      "api_key": "",
+      "resource_id": "auto",
+      "audio_format": "mp3",
+      "sample_rate": 24000,
+      "voice_type": "zh_female_vv_uranus_bigtts",
+      "model": ""
+    }
+  },
   "ui": {
     "theme": "dracula",
     "max_tokens": 4096,
