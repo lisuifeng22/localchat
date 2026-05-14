@@ -2096,6 +2096,170 @@ function escapeHtml(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+
+// LOCALCHAT_SETTINGS_SAVE_FIX_V5_START
+// 修复 v4 前端设置弹窗：恢复 showSettings / saveSettings / provider 切换 / 火山引擎区域切换。
+// 只改前端逻辑，不恢复旧版火山控制台 App ID / Access Key。
+(function () {
+  const $ = (id) => document.getElementById(id);
+
+  function safeValue(id, fallback = '') {
+    const el = $(id);
+    return el ? el.value : fallback;
+  }
+
+  function setValue(id, value) {
+    const el = $(id);
+    if (!el) return;
+    el.value = value ?? '';
+  }
+
+  function notify(message, isError = false) {
+    if (typeof showError === 'function' && isError) {
+      showError(message);
+      return;
+    }
+    if (isError) {
+      alert(message);
+    } else {
+      console.log(message);
+    }
+  }
+
+  function setSelectValue(selectId, value) {
+    const select = $(selectId);
+    if (!select) return;
+    const finalValue = value ?? '';
+    if (finalValue && !Array.from(select.options).some(opt => opt.value === finalValue)) {
+      const opt = document.createElement('option');
+      opt.value = finalValue;
+      opt.textContent = finalValue;
+      select.appendChild(opt);
+    }
+    select.value = finalValue;
+  }
+
+  window.onProviderChange = function onProviderChange() {
+    const provider = safeValue('selProvider', 'openai');
+    const openaiBox = $('openaiSettings');
+    const anthropicBox = $('anthropicSettings');
+    if (openaiBox) openaiBox.style.display = provider === 'anthropic' ? 'none' : 'block';
+    if (anthropicBox) anthropicBox.style.display = provider === 'anthropic' ? 'block' : 'none';
+  };
+
+  window.onTtsProviderChange = function onTtsProviderChange() {
+    const tts = safeValue('selTtsProvider', 'local');
+    const stt = safeValue('selSttProvider', 'local');
+    const box = $('volcengineSettings');
+    if (box) box.style.display = (tts === 'volcengine' || stt === 'volcengine') ? 'block' : 'none';
+  };
+
+  window.showSettings = async function showSettings() {
+    try {
+      const cfg = await api('GET', '/api/config');
+      const provider = cfg.provider || 'openai';
+      setSelectValue('selProvider', provider);
+
+      const openai = cfg.openai || {};
+      const anthropic = cfg.anthropic || {};
+      setValue('inputKey', openai.api_key || '');
+      setValue('inputEndpoint', openai.base_url || '');
+      setValue('inputModel', openai.model || '');
+      setValue('inputAnthropicKey', anthropic.api_key || '');
+      setValue('inputAnthropicModel', anthropic.model || '');
+      setValue('inputTemp', cfg.temperature ?? 0.7);
+      setValue('inputDefaultPrompt', cfg.default_prompt || '');
+      setValue('inputDefaultNegPrompt', cfg.default_negative_prompt || '');
+
+      const voice = cfg.voice || {};
+      const volc = voice.volcengine || {};
+      setSelectValue('selTtsProvider', voice.tts_provider || 'local');
+      setSelectValue('selSttProvider', voice.stt_provider || 'local');
+      setValue('inputVolcApiKey', volc.api_key || '');
+      setValue('inputVolcResourceId', volc.resource_id || 'auto');
+      setSelectValue('inputVolcVoiceType', volc.voice_type || 'zh_female_vv_uranus_bigtts');
+
+      window.onProviderChange();
+      window.onTtsProviderChange();
+
+      const modal = $('settingsModal');
+      if (modal) modal.classList.add('show');
+    } catch (e) {
+      notify('读取设置失败：' + (e.message || e), true);
+    }
+  };
+
+  window.saveSettings = async function saveSettings() {
+    const provider = safeValue('selProvider', 'openai');
+    const payload = {
+      provider,
+      temperature: Number(safeValue('inputTemp', '0.7')),
+      default_prompt: safeValue('inputDefaultPrompt'),
+      default_negative_prompt: safeValue('inputDefaultNegPrompt'),
+      tts_provider: safeValue('selTtsProvider', 'local'),
+      stt_provider: safeValue('selSttProvider', 'local'),
+      volcengine_api_key: safeValue('inputVolcApiKey'),
+      volcengine_resource_id: safeValue('inputVolcResourceId', 'auto'),
+      volcengine_voice_type: safeValue('inputVolcVoiceType', 'zh_female_vv_uranus_bigtts'),
+      volcengine_audio_format: 'mp3'
+    };
+
+    if (provider === 'anthropic') {
+      payload.api_key = safeValue('inputAnthropicKey');
+      payload.model = safeValue('inputAnthropicModel');
+    } else {
+      payload.api_key = safeValue('inputKey');
+      payload.base_url = safeValue('inputEndpoint');
+      payload.model = safeValue('inputModel');
+    }
+
+    try {
+      await api('POST', '/api/config', payload);
+
+      const systemPrompt = safeValue('inputSystemPrompt');
+      if (systemPrompt) {
+        await api('POST', '/api/sessions/system', { prompt: systemPrompt });
+      }
+
+      closeModal('settingsModal');
+      await loadStatus();
+      if (typeof loadTtsVoices === 'function') await loadTtsVoices();
+      notify('设置已保存');
+    } catch (e) {
+      notify('保存设置失败：' + (e.message || e), true);
+    }
+  };
+
+  window.closeModal = window.closeModal || function closeModal(id) {
+    const modal = $(id);
+    if (modal) modal.classList.remove('show');
+  };
+
+  window.restartServer = window.restartServer || async function restartServer() {
+    if (!confirm('确定要重启服务吗？')) return;
+    try {
+      await api('POST', '/api/restart');
+    } catch (e) {
+      // 服务重启时连接被断开是正常现象。
+    }
+  };
+
+  function installSettingsListeners() {
+    const stt = $('selSttProvider');
+    if (stt && !stt.dataset.settingsFixBound) {
+      stt.addEventListener('change', window.onTtsProviderChange);
+      stt.dataset.settingsFixBound = '1';
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installSettingsListeners);
+  } else {
+    installSettingsListeners();
+  }
+})();
+// LOCALCHAT_SETTINGS_SAVE_FIX_V5_END
 </script>
 </body>
 </html>

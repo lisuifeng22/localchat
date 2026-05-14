@@ -1,25 +1,43 @@
-# Python
+# Python bytecode/cache
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# API keys & config
+# Virtual environments
+.venv/
+venv/
+env/
+
+# API keys & local config
 config.json
 config.local.json
+.env
+*.env
+*.env.local
 
-# User data
+# User/runtime data
 sessions/
 generated/
 .chat_history
 
-# OS
+# Temporary, backup and patch artifacts
+*.bak
+*.tmp
+*.log
+*.diff
+*.patch
+*.orig
+*.rej
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE/editor
 .vscode/
 .idea/
-
-# Env
-.env
-*.env.local
