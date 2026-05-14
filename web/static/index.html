@@ -487,9 +487,120 @@
     <label>默认反向提示词（每次生图自动附加）</label>
     <textarea id="inputDefaultNegPrompt" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;outline:none;resize:vertical" placeholder="nsfw, low quality, distorted, deformed, blurry, bad anatomy"></textarea>
 
-    <hr style="border-color:var(--border);margin:16px 0">
+    
 
-    <h3 style="font-size:14px;color:var(--text);margin-bottom:8px">🔊 语音设置</h3>
+  <div id="sdTxt2ImgSettings" style="margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02)">
+    <h3 style="font-size:14px;color:var(--text);margin:0 0 10px 0">文生图参数</h3>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<!-- Stable Diffusion model selector v6.8 -->
+<div class="form-row sd-model-selector-v68" style="display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0;">
+  <div class="form-group">
+    <label>Stable Diffusion 模型</label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="selSdModel" style="flex:1;min-width:0;">
+        <option value="">等待加载模型列表...</option>
+      </select>
+      <button type="button" onclick="loadSdModelListV68()" title="刷新模型列表">刷新</button>
+    </div>
+    <small id="sdModelHint" style="opacity:.75;display:block;margin-top:6px;">会从本项目后端 /api/sd/models 读取 SD WebUI 模型列表。</small>
+  </div>
+</div>
+<!-- end Stable Diffusion model selector v6.8 -->
+<div>
+        <label>采样方法 (Sampler)</label>
+        <select id="inputSdSamplerName">
+          <option value="DPM++ 2M">DPM++ 2M</option>
+          <option value="DPM++ SDE">DPM++ SDE</option>
+          <option value="DPM++ 2M SDE">DPM++ 2M SDE</option>
+          <option value="Euler">Euler</option>
+          <option value="Euler a">Euler a</option>
+          <option value="DDIM">DDIM</option>
+          <option value="UniPC">UniPC</option>
+        </select>
+      </div>
+      <div>
+        <label>调度类型 (Schedule type)</label>
+        <select id="inputSdScheduler">
+          <option value="Automatic">Automatic</option>
+          <option value="Karras">Karras</option>
+          <option value="Exponential">Exponential</option>
+          <option value="Polyexponential">Polyexponential</option>
+          <option value="SGM Uniform">SGM Uniform</option>
+          <option value="Simple">Simple</option>
+          <option value="Normal">Normal</option>
+          <option value="DDIM">DDIM</option>
+        </select>
+      </div>
+    </div>
+
+    <label>迭代步数 (Steps)</label>
+    <input type="number" id="inputSdSteps" min="1" max="150" step="1" placeholder="9">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+      <label style="display:flex;align-items:center;gap:8px;margin:0">
+        <input type="checkbox" id="inputSdHiresFix" style="width:auto"> 高分辨率修复 (Hires. fix)
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin:0">
+        <input type="checkbox" id="inputSdRefiner" style="width:auto"> Refiner
+      </label>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+      <div>
+        <label>宽度</label>
+        <input type="number" id="inputSdWidth" min="64" max="4096" step="8" placeholder="720">
+      </div>
+      <div>
+        <label>高度</label>
+        <input type="number" id="inputSdHeight" min="64" max="4096" step="8" placeholder="1280">
+      </div>
+      <div>
+        <label>总批次数</label>
+        <input type="number" id="inputSdBatchCount" min="1" max="20" step="1" placeholder="1">
+      </div>
+      <div>
+        <label>单批数量</label>
+        <input type="number" id="inputSdBatchSize" min="1" max="8" step="1" placeholder="1">
+      </div>
+    </div>
+
+    <label>提示词引导系数 (CFG Scale)</label>
+    <input type="number" id="inputSdCfgScale" min="1" max="30" step="0.5" placeholder="7">
+
+    <details style="margin-top:10px;color:var(--text-dim);font-size:12px">
+      <summary style="cursor:pointer;color:var(--text)">高级参数</summary>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+        <div>
+          <label>Hires 放大倍数</label>
+          <input type="number" id="inputSdHrScale" min="1" max="4" step="0.1" placeholder="2">
+        </div>
+        <div>
+          <label>Hires Upscaler</label>
+          <input type="text" id="inputSdHrUpscaler" placeholder="Latent">
+        </div>
+        <div>
+          <label>Hires 二次步数</label>
+          <input type="number" id="inputSdHrSecondPassSteps" min="0" max="150" step="1" placeholder="0">
+        </div>
+        <div>
+          <label>重绘幅度</label>
+          <input type="number" id="inputSdDenoisingStrength" min="0" max="1" step="0.05" placeholder="0.7">
+        </div>
+        <div>
+          <label>Refiner 模型名</label>
+          <input type="text" id="inputSdRefinerCheckpoint" placeholder="留空则不启用 Refiner 模型">
+        </div>
+        <div>
+          <label>Refiner 切换点</label>
+          <input type="number" id="inputSdRefinerSwitchAt" min="0" max="1" step="0.05" placeholder="0.8">
+        </div>
+      </div>
+    </details>
+  </div>
+
+<hr style="border-color:var(--border);margin:16px 0">
+<h3 style="font-size:14px;color:var(--text);margin-bottom:8px">🔊 语音设置</h3>
 
     <label>TTS 引擎（文字转语音）</label>
     <select id="selTtsProvider" onchange="onTtsProviderChange()">
@@ -2261,5 +2372,456 @@ function escapeHtml(s) {
 })();
 // LOCALCHAT_SETTINGS_SAVE_FIX_V5_END
 </script>
+
+
+<script>
+/* SD_TXT2IMG_SETTINGS_PATCH_V61: appended by patch_sd_txt2img_settings_v6_1.py */
+
+
+// ── Settings Modal ─────────────────────────────────────────────────────────
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('show');
+}
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('show');
+}
+
+function setValue(id, value, fallback = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = (value === undefined || value === null) ? fallback : value;
+}
+
+function setChecked(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.checked = !!value;
+}
+
+function getValue(id, fallback = '') {
+  const el = document.getElementById(id);
+  if (!el) return fallback;
+  return el.value;
+}
+
+function getNumber(id, fallback = null) {
+  const el = document.getElementById(id);
+  if (!el || el.value === '') return fallback;
+  const n = Number(el.value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getChecked(id) {
+  const el = document.getElementById(id);
+  return !!(el && el.checked);
+}
+
+function onProviderChange() {
+  const provider = getValue('selProvider', 'openai');
+  const openai = document.getElementById('openaiSettings');
+  const anthropic = document.getElementById('anthropicSettings');
+  if (openai) openai.style.display = provider === 'openai' ? 'block' : 'none';
+  if (anthropic) anthropic.style.display = provider === 'anthropic' ? 'block' : 'none';
+}
+
+function onTtsProviderChange() {
+  const provider = getValue('selTtsProvider', 'local');
+  const panel = document.getElementById('volcengineSettings');
+  if (panel) panel.style.display = provider === 'volcengine' ? 'block' : 'none';
+}
+
+async function showSettings() {
+  try {
+    const cfg = await api('GET', '/api/config');
+    const openai = cfg.openai || {};
+    const anthropic = cfg.anthropic || {};
+    const voice = cfg.voice || {};
+    const volc = voice.volcengine || {};
+    const image = cfg.image || {};
+
+    setValue('selProvider', cfg.provider || 'openai');
+    setValue('inputKey', openai.api_key || '');
+    setValue('inputEndpoint', openai.base_url || '');
+    setValue('inputModel', openai.model || '');
+    setValue('inputAnthropicKey', anthropic.api_key || '');
+    setValue('inputAnthropicModel', anthropic.model || '');
+    setValue('inputTemp', cfg.temperature ?? 0.7);
+    setValue('inputDefaultPrompt', cfg.default_prompt || image.default_prompt || '');
+    setValue('inputDefaultNegPrompt', cfg.default_negative_prompt || image.default_negative_prompt || '');
+
+    setValue('inputSdSamplerName', image.sampler_name || 'DPM++ 2M');
+    setValue('inputSdScheduler', image.scheduler || 'Automatic');
+    setValue('inputSdSteps', image.steps ?? 9);
+    setValue('inputSdWidth', image.width ?? 720);
+    setValue('inputSdHeight', image.height ?? 1280);
+    setValue('inputSdBatchCount', image.n_iter ?? 1);
+    setValue('inputSdBatchSize', image.batch_size ?? 1);
+    setValue('inputSdCfgScale', image.cfg_scale ?? 7);
+    setChecked('inputSdHiresFix', image.enable_hr || false);
+    setValue('inputSdHrScale', image.hr_scale ?? 2);
+    setValue('inputSdHrUpscaler', image.hr_upscaler || 'Latent');
+    setValue('inputSdHrSecondPassSteps', image.hr_second_pass_steps ?? 0);
+    setValue('inputSdDenoisingStrength', image.denoising_strength ?? 0.7);
+    setValue('inputSdRefinerCheckpoint', image.refiner_checkpoint || '');
+    setChecked('inputSdRefiner', !!image.refiner_checkpoint);
+    setValue('inputSdRefinerSwitchAt', image.refiner_switch_at ?? 0.8);
+
+    setValue('selTtsProvider', voice.tts_provider || 'local');
+    setValue('selSttProvider', voice.stt_provider || 'local');
+    setValue('inputVolcApiKey', volc.api_key || '');
+    setValue('inputVolcResourceId', volc.resource_id || 'auto');
+    setValue('inputVolcVoiceType', volc.voice_type || 'zh_female_vv_uranus_bigtts');
+
+    onProviderChange();
+    onTtsProviderChange();
+    openModal('settingsModal');
+  } catch (e) {
+    alert('读取设置失败：' + e.message);
+  }
+}
+
+async function saveSettings() {
+  const refinerEnabled = getChecked('inputSdRefiner');
+  const refinerCheckpoint = refinerEnabled ? getValue('inputSdRefinerCheckpoint', '').trim() : '';
+
+  const body = {
+    provider: getValue('selProvider', 'openai'),
+    api_key: getValue('selProvider', 'openai') === 'anthropic' ? getValue('inputAnthropicKey') : getValue('inputKey'),
+    base_url: getValue('inputEndpoint'),
+    model: getValue('selProvider', 'openai') === 'anthropic' ? getValue('inputAnthropicModel') : getValue('inputModel'),
+    temperature: getNumber('inputTemp', 0.7),
+    default_prompt: getValue('inputDefaultPrompt'),
+    default_negative_prompt: getValue('inputDefaultNegPrompt'),
+
+    sd_sampler_name: getValue('inputSdSamplerName', 'DPM++ 2M'),
+    sd_scheduler: getValue('inputSdScheduler', 'Automatic'),
+    sd_steps: getNumber('inputSdSteps', 9),
+    sd_width: getNumber('inputSdWidth', 720),
+    sd_height: getNumber('inputSdHeight', 1280),
+    sd_cfg_scale: getNumber('inputSdCfgScale', 7),
+    sd_batch_size: getNumber('inputSdBatchSize', 1),
+    sd_n_iter: getNumber('inputSdBatchCount', 1),
+    sd_enable_hr: getChecked('inputSdHiresFix'),
+    sd_hr_scale: getNumber('inputSdHrScale', 2),
+    sd_hr_upscaler: getValue('inputSdHrUpscaler', 'Latent'),
+    sd_hr_second_pass_steps: getNumber('inputSdHrSecondPassSteps', 0),
+    sd_denoising_strength: getNumber('inputSdDenoisingStrength', 0.7),
+    sd_refiner_checkpoint: refinerCheckpoint,
+    sd_refiner_switch_at: getNumber('inputSdRefinerSwitchAt', 0.8),
+
+    tts_provider: getValue('selTtsProvider', 'local'),
+    stt_provider: getValue('selSttProvider', 'local'),
+    volcengine_api_key: getValue('inputVolcApiKey'),
+    volcengine_resource_id: getValue('inputVolcResourceId', 'auto'),
+    volcengine_voice_type: getValue('inputVolcVoiceType', 'zh_female_vv_uranus_bigtts'),
+    volcengine_audio_format: 'mp3',
+    volcengine_model: '',
+  };
+
+  try {
+    await api('POST', '/api/config', body);
+    closeModal('settingsModal');
+    await loadStatus();
+    alert('设置已保存');
+  } catch (e) {
+    alert('保存设置失败：' + e.message);
+  }
+}
+
+</script>
+
+
+<script id="sd-txt2img-settings-bridge-v6-2">
+(function () {
+  const SD_FIELDS = {
+    sampler_name: ["inputSdSampler", "selSdSampler", "inputSamplerName", "txt2imgSampler", "sdSampler"],
+    scheduler: ["inputSdScheduler", "selSdScheduler", "inputScheduleType", "txt2imgScheduler", "sdScheduler"],
+    sd_steps: ["inputSdSteps", "inputSteps", "txt2imgSteps", "sdSteps"],
+    sd_width: ["inputSdWidth", "inputWidth", "txt2imgWidth", "sdWidth"],
+    sd_height: ["inputSdHeight", "inputHeight", "txt2imgHeight", "sdHeight"],
+    sd_cfg_scale: ["inputSdCfgScale", "inputCfgScale", "txt2imgCfgScale", "sdCfgScale"],
+    n_iter: ["inputSdBatchCount", "inputBatchCount", "txt2imgBatchCount", "sdBatchCount"],
+    batch_size: ["inputSdBatchSize", "inputBatchSize", "txt2imgBatchSize", "sdBatchSize"],
+    enable_hr: ["chkSdHiresFix", "chkHiresFix", "txt2imgHiresFix", "sdHiresFix"],
+    hr_scale: ["inputSdHrScale", "inputHrScale", "txt2imgHrScale", "sdHrScale"],
+    hr_upscaler: ["inputSdHrUpscaler", "selSdHrUpscaler", "inputHrUpscaler", "sdHrUpscaler"],
+    hr_second_pass_steps: ["inputSdHrSecondPassSteps", "inputHrSecondPassSteps", "sdHrSecondPassSteps"],
+    denoising_strength: ["inputSdDenoisingStrength", "inputDenoisingStrength", "sdDenoisingStrength"],
+    enable_refiner: ["chkSdRefiner", "chkRefiner", "txt2imgRefiner", "sdRefiner"],
+    refiner_checkpoint: ["inputSdRefinerCheckpoint", "inputRefinerCheckpoint", "sdRefinerCheckpoint"],
+    refiner_switch_at: ["inputSdRefinerSwitchAt", "inputRefinerSwitchAt", "sdRefinerSwitchAt"]
+  };
+
+  function findEl(ids) {
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function readValue(name, ids) {
+    const el = findEl(ids);
+    if (!el) return undefined;
+    if (el.type === "checkbox") return !!el.checked;
+    const raw = el.value;
+    if (raw === undefined || raw === null || raw === "") return undefined;
+    if (["sd_steps", "sd_width", "sd_height", "n_iter", "batch_size", "hr_second_pass_steps"].includes(name)) {
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) ? n : undefined;
+    }
+    if (["sd_cfg_scale", "hr_scale", "denoising_strength", "refiner_switch_at"].includes(name)) {
+      const n = parseFloat(raw);
+      return Number.isFinite(n) ? n : undefined;
+    }
+    return raw;
+  }
+
+  function writeValue(name, ids, imageCfg) {
+    const el = findEl(ids);
+    if (!el || !imageCfg) return;
+    const configKeyMap = {
+      sd_steps: "steps",
+      sd_width: "width",
+      sd_height: "height",
+      sd_cfg_scale: "cfg_scale"
+    };
+    const key = configKeyMap[name] || name;
+    const value = imageCfg[key];
+    if (value === undefined || value === null) return;
+    if (el.type === "checkbox") {
+      el.checked = !!value;
+    } else {
+      el.value = value;
+    }
+  }
+
+  function collectSDSettings() {
+    const data = {};
+    for (const [name, ids] of Object.entries(SD_FIELDS)) {
+      const value = readValue(name, ids);
+      if (value !== undefined) data[name] = value;
+    }
+    return data;
+  }
+
+  async function applySDSettingsFromServer() {
+    try {
+      const resp = await fetch("/api/config");
+      if (!resp.ok) return;
+      const cfg = await resp.json();
+      const imageCfg = cfg.image || {};
+      for (const [name, ids] of Object.entries(SD_FIELDS)) {
+        writeValue(name, ids, imageCfg);
+      }
+    } catch (err) {
+      console.warn("[SD settings] load skipped:", err);
+    }
+  }
+
+  async function postSDSettings() {
+    const data = collectSDSettings();
+    if (!Object.keys(data).length) return;
+    try {
+      const resp = await fetch("/api/config", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) console.warn("[SD settings] save failed:", await resp.text());
+    } catch (err) {
+      console.warn("[SD settings] save skipped:", err);
+    }
+  }
+
+  const oldShowSettings = window.showSettings;
+  if (typeof oldShowSettings === "function" && !oldShowSettings.__sdBridgeWrapped) {
+    const wrappedShow = async function () {
+      const result = await oldShowSettings.apply(this, arguments);
+      await applySDSettingsFromServer();
+      return result;
+    };
+    wrappedShow.__sdBridgeWrapped = true;
+    window.showSettings = wrappedShow;
+  } else {
+    document.addEventListener("DOMContentLoaded", applySDSettingsFromServer);
+  }
+
+  const oldSaveSettings = window.saveSettings;
+  if (typeof oldSaveSettings === "function" && !oldSaveSettings.__sdBridgeWrapped) {
+    const wrappedSave = async function () {
+      const result = await oldSaveSettings.apply(this, arguments);
+      await postSDSettings();
+      return result;
+    };
+    wrappedSave.__sdBridgeWrapped = true;
+    window.saveSettings = wrappedSave;
+  }
+
+  window.collectSDSettingsV62 = collectSDSettings;
+})();
+
+// ── Stable Diffusion model selector v6.8 ───────────────────────────────────
+async function fetchJsonV68(url, options) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`${url} 没有返回 JSON，HTTP ${res.status}，前 160 字：${text.slice(0, 160)}`);
+  }
+}
+
+async function loadSdModelListV68(selectedValue) {
+  const sel = document.getElementById('selSdModel');
+  const hint = document.getElementById('sdModelHint');
+  if (!sel) return;
+
+  const selected = selectedValue ?? sel.value ?? '';
+  sel.innerHTML = '<option value="">加载中...</option>';
+  if (hint) hint.textContent = '正在请求 localchat 后端 /api/sd/models ...';
+
+  try {
+    const data = await fetchJsonV68('/api/sd/models?_=' + Date.now());
+    const models = data.models || [];
+    sel.innerHTML = '';
+
+    if (!data.ok) {
+      const opt = document.createElement('option');
+      opt.value = selected || '';
+      opt.textContent = selected || '获取失败';
+      opt.selected = true;
+      sel.appendChild(opt);
+      if (hint) hint.textContent = `获取失败：${data.error || '未知错误'}；SD 地址：${data.base_url || ''}`;
+      return;
+    }
+
+    if (!models.length) {
+      const opt = document.createElement('option');
+      opt.value = selected || '';
+      opt.textContent = selected || '没有模型';
+      opt.selected = true;
+      sel.appendChild(opt);
+      if (hint) hint.textContent = `后端已连通，但模型数量为 0；SD 地址：${data.base_url || ''}`;
+      return;
+    }
+
+    for (const item of models) {
+      const opt = document.createElement('option');
+      opt.value = item;
+      opt.textContent = item;
+      if (item === selected) opt.selected = true;
+      sel.appendChild(opt);
+    }
+
+    if (selected && !models.includes(selected)) {
+      const opt = document.createElement('option');
+      opt.value = selected;
+      opt.textContent = selected;
+      opt.selected = true;
+      sel.appendChild(opt);
+    }
+
+    if (!selected && sel.options.length > 0) sel.selectedIndex = 0;
+    if (hint) hint.textContent = `已读取 ${models.length} 个模型；数据来自 ${data.base_url || 'SD WebUI'}。`;
+  } catch (e) {
+    sel.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = selected || '';
+    opt.textContent = selected || '加载失败';
+    opt.selected = true;
+    sel.appendChild(opt);
+    if (hint) hint.textContent = `模型列表加载失败：${e.message || e}`;
+    console.error(e);
+  }
+}
+
+async function loadSdModelSettingV68() {
+  let selected = '';
+  try {
+    const data = await fetchJsonV68('/api/sd/model-setting?_=' + Date.now());
+    selected = data.model_checkpoint || '';
+  } catch (e) {
+    console.warn('读取 SD 模型设置失败', e);
+  }
+  await loadSdModelListV68(selected);
+}
+
+async function saveSdModelSettingV68() {
+  const sel = document.getElementById('selSdModel');
+  const hint = document.getElementById('sdModelHint');
+  if (!sel) return;
+
+  try {
+    const data = await fetchJsonV68('/api/sd/model-setting', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model_checkpoint: sel.value || '' }),
+    });
+    if (hint) {
+      if (data.applied) {
+        hint.textContent = '模型已保存，并已同步切换 SD WebUI 当前模型。';
+      } else if (data.error) {
+        hint.textContent = `模型已保存到本项目，但同步切换 SD WebUI 失败：${data.error}`;
+      } else {
+        hint.textContent = '模型已保存。';
+      }
+    }
+  } catch (e) {
+    if (hint) hint.textContent = `保存模型失败：${e.message || e}`;
+    console.error(e);
+  }
+}
+
+function installSdModelHooksV68() {
+  if (window.__sdModelHooksV68Installed) return;
+  window.__sdModelHooksV68Installed = true;
+
+  setTimeout(() => {
+    if (document.getElementById('selSdModel')) loadSdModelSettingV68();
+  }, 300);
+
+  if (typeof window.showSettings === 'function' && !window.showSettings.__sdModelV68Wrapped) {
+    const oldShowSettings = window.showSettings;
+    const wrappedShowSettings = async function(...args) {
+      const ret = await oldShowSettings.apply(this, args);
+      setTimeout(() => loadSdModelSettingV68(), 50);
+      return ret;
+    };
+    wrappedShowSettings.__sdModelV68Wrapped = true;
+    window.showSettings = wrappedShowSettings;
+  }
+
+  if (typeof window.saveSettings === 'function' && !window.saveSettings.__sdModelV68Wrapped) {
+    const oldSaveSettings = window.saveSettings;
+    const wrappedSaveSettings = async function(...args) {
+      await saveSdModelSettingV68();
+      return await oldSaveSettings.apply(this, args);
+    };
+    wrappedSaveSettings.__sdModelV68Wrapped = true;
+    window.saveSettings = wrappedSaveSettings;
+  }
+
+  const obs = new MutationObserver(() => {
+    const sel = document.getElementById('selSdModel');
+    if (sel && sel.options.length === 1 && /加载|等待/.test(sel.options[0].textContent || '')) {
+      loadSdModelSettingV68();
+    }
+  });
+  obs.observe(document.documentElement, {childList: true, subtree: true, attributes: true});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', installSdModelHooksV68);
+} else {
+  installSdModelHooksV68();
+}
+// ── end Stable Diffusion model selector v6.8 ───────────────────────────────
+
+</script>
+
 </body>
 </html>

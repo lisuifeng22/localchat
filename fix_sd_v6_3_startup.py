@@ -1,4 +1,21 @@
-"""FastAPI web server for Local AI Chat."""
+"""Hotfix for LocalChat SD txt2img settings patch v6.2.
+
+This script fixes the startup-breaking IndentationError introduced by the
+previous patch by replacing web/server.py with a clean, formatted version and
+ensuring providers/image.py supports the new SD txt2img parameters.
+
+Run from the project root:
+    python fix_sd_v6_3_startup.py
+"""
+from __future__ import annotations
+
+import py_compile
+import shutil
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+
+SERVER_CODE = r'''"""FastAPI web server for Local AI Chat."""
 from __future__ import annotations
 
 import asyncio
@@ -43,136 +60,6 @@ image_provider: Optional[SDWebUIProvider] = None
 audio_processor = AudioProcessor(voice_config=config.get_voice_config())
 app = FastAPI(title="Local AI Chat")
 
-# ── Stable Diffusion Model Selector v6.8 ────────────────────────────────────
-try:
-    import httpx as _sd_model_httpx
-except Exception:
-    _sd_model_httpx = None
-
-try:
-    from pydantic import BaseModel as _SDModelBaseModel
-except Exception:
-    _SDModelBaseModel = BaseModel
-
-try:
-    from typing import Optional as _SDModelOptional
-except Exception:
-    _SDModelOptional = Optional
-
-
-class SDModelSettingUpdateV68(_SDModelBaseModel):
-    model_checkpoint: _SDModelOptional[str] = None
-
-
-def _sd_model_cfg_dict_v68():
-    return config.data.setdefault("image", {}).setdefault("sd_webui", {})
-
-
-def _sd_model_base_url_v68() -> str:
-    try:
-        img_cfg = config.get_image_provider_config()
-    except Exception:
-        img_cfg = _sd_model_cfg_dict_v68()
-    return (
-        img_cfg.get("base_url")
-        or img_cfg.get("api_url")
-        or img_cfg.get("url")
-        or "http://127.0.0.1:7860"
-    ).rstrip("/")
-
-
-async def _sd_model_get_json_v68(path: str):
-    if _sd_model_httpx is None:
-        raise RuntimeError("缺少 httpx 依赖，请执行 pip install httpx")
-    url = f"{_sd_model_base_url_v68()}{path}"
-    async with _sd_model_httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def _sd_model_post_json_v68(path: str, payload: dict):
-    if _sd_model_httpx is None:
-        raise RuntimeError("缺少 httpx 依赖，请执行 pip install httpx")
-    url = f"{_sd_model_base_url_v68()}{path}"
-    async with _sd_model_httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-        ctype = (resp.headers.get("content-type") or "").lower()
-        if "application/json" in ctype:
-            return resp.json()
-        return {"ok": True, "text": resp.text}
-
-
-@app.get("/api/sd/models")
-async def api_sd_model_selector_list_models_v68():
-    try:
-        data = await _sd_model_get_json_v68("/sdapi/v1/sd-models")
-        models = []
-        for item in data or []:
-            title = item.get("title") or item.get("model_name") or item.get("filename")
-            if title and title not in models:
-                models.append(title)
-        return {
-            "ok": True,
-            "base_url": _sd_model_base_url_v68(),
-            "models": models,
-            "count": len(models),
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "base_url": _sd_model_base_url_v68(),
-            "models": [],
-            "count": 0,
-            "error": str(e),
-        }
-
-
-@app.get("/api/sd/model-setting")
-async def api_sd_model_selector_get_setting_v68():
-    img_cfg = _sd_model_cfg_dict_v68()
-    current = img_cfg.get("model_checkpoint", "") or img_cfg.get("sd_model_checkpoint", "")
-    if not current:
-        try:
-            opts = await _sd_model_get_json_v68("/sdapi/v1/options")
-            current = opts.get("sd_model_checkpoint", "") or current
-        except Exception:
-            pass
-    return {
-        "ok": True,
-        "base_url": _sd_model_base_url_v68(),
-        "model_checkpoint": current,
-    }
-
-
-@app.post("/api/sd/model-setting")
-async def api_sd_model_selector_update_setting_v68(update: SDModelSettingUpdateV68):
-    global image_provider
-    img_cfg = _sd_model_cfg_dict_v68()
-    selected = (update.model_checkpoint or "").strip()
-    img_cfg["model_checkpoint"] = selected
-    config.save()
-    try:
-        image_provider = None
-    except Exception:
-        pass
-    applied = False
-    error = None
-    if selected:
-        try:
-            await _sd_model_post_json_v68("/sdapi/v1/options", {"sd_model_checkpoint": selected})
-            applied = True
-        except Exception as e:
-            error = str(e)
-    return {
-        "ok": True,
-        "base_url": _sd_model_base_url_v68(),
-        "model_checkpoint": selected,
-        "applied": applied,
-        "error": error,
-    }
-# ── end Stable Diffusion Model Selector v6.8 ────────────────────────────────
 
 SD_TXT2IMG_CONFIG_KEYS = {
     "sampler_name": "sampler_name",
@@ -1000,3 +887,163 @@ def run():
 
 if __name__ == "__main__":
     run()
+'''
+
+IMAGE_PROVIDER_CODE = r'''"""Image generation provider — connects to Stable Diffusion WebUI (AUTOMATIC1111)."""
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from base64 import b64decode
+from typing import Any
+
+import httpx
+
+
+class ImageProvider(ABC):
+    """Abstract base for image generation backends."""
+
+    @abstractmethod
+    async def generate(self, prompt: str, **kwargs) -> bytes:
+        """Generate an image from a text prompt. Returns raw PNG bytes."""
+        raise NotImplementedError
+
+
+class SDWebUIProvider(ImageProvider):
+    """Generates images via AUTOMATIC1111's Stable Diffusion WebUI API."""
+
+    TXT2IMG_KEYS = {
+        "negative_prompt",
+        "steps",
+        "width",
+        "height",
+        "cfg_scale",
+        "sampler_name",
+        "scheduler",
+        "n_iter",
+        "batch_size",
+        "enable_hr",
+        "hr_scale",
+        "hr_upscaler",
+        "hr_second_pass_steps",
+        "denoising_strength",
+        "refiner_checkpoint",
+        "refiner_switch_at",
+    }
+
+    def __init__(self, config: dict):
+        self.base_url = config.get("base_url", "http://127.0.0.1:7860").rstrip("/")
+        self.default_params = {
+            "default_prompt": config.get("default_prompt", ""),
+            "negative_prompt": config.get(
+                "default_negative_prompt", config.get("negative_prompt", "")
+            ),
+            "steps": config.get("steps", 20),
+            "width": config.get("width", 512),
+            "height": config.get("height", 512),
+            "cfg_scale": config.get("cfg_scale", 7.0),
+            "sampler_name": config.get("sampler_name", "DPM++ 2M"),
+            "scheduler": config.get("scheduler", "Automatic"),
+            "n_iter": config.get("n_iter", 1),
+            "batch_size": config.get("batch_size", 1),
+            "enable_hr": config.get("enable_hr", False),
+            "hr_scale": config.get("hr_scale", 2.0),
+            "hr_upscaler": config.get("hr_upscaler", "Latent"),
+            "hr_second_pass_steps": config.get("hr_second_pass_steps", 0),
+            "denoising_strength": config.get("denoising_strength", 0.7),
+            "enable_refiner": config.get("enable_refiner", False),
+            "refiner_checkpoint": config.get("refiner_checkpoint", ""),
+            "refiner_switch_at": config.get("refiner_switch_at", 0.8),
+        }
+        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=120.0)
+
+    @staticmethod
+    def _keep_payload_value(key: str, value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str) and value.strip() == "":
+            return False
+        if key == "scheduler" and value == "Automatic":
+            return False
+        return True
+
+    async def generate(self, prompt: str, **kwargs) -> bytes:
+        # Merge default prompt into positive prompt if not overridden.
+        default_prompt = kwargs.pop(
+            "default_prompt", self.default_params.get("default_prompt", "")
+        )
+        if default_prompt and default_prompt not in prompt:
+            prompt = f"{default_prompt}, {prompt}"
+
+        params = {**self.default_params, "prompt": prompt}
+        params.update(kwargs)
+
+        enable_refiner = bool(params.pop("enable_refiner", False))
+        if not enable_refiner:
+            params.pop("refiner_checkpoint", None)
+            params.pop("refiner_switch_at", None)
+
+        payload = {"prompt": params["prompt"]}
+        for key in self.TXT2IMG_KEYS:
+            value = params.get(key)
+            if self._keep_payload_value(key, value):
+                payload[key] = value
+
+        try:
+            resp = await self.client.post("/sdapi/v1/txt2img", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            images = data.get("images", [])
+            if not images:
+                raise RuntimeError("SD WebUI returned no images")
+            raw = images[0]
+            if isinstance(raw, dict):
+                raw = raw.get("data", "")
+            return b64decode(raw)
+        except httpx.ConnectError:
+            raise ConnectionError(
+                f"Cannot connect to Stable Diffusion WebUI at {self.base_url}. "
+                "Make sure AUTOMATIC1111 is running with --api flag."
+            )
+        except httpx.TimeoutException:
+            raise TimeoutError(
+                "Image generation timed out after 120s. Try reducing steps or resolution."
+            )
+
+    async def close(self):
+        await self.client.aclose()
+'''
+
+
+def backup(path: Path) -> None:
+    if not path.exists():
+        return
+    bak = path.with_suffix(path.suffix + ".v6_3_hotfix.bak")
+    if not bak.exists():
+        shutil.copy2(path, bak)
+        print(f"[backup] {path} -> {bak}")
+
+
+def write_file(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup(path)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    py_compile.compile(str(path), doraise=True)
+    print(f"[ok] repaired and compiled: {path}")
+
+
+def main() -> None:
+    server_path = ROOT / "web" / "server.py"
+    image_path = ROOT / "providers" / "image.py"
+    if not server_path.exists():
+        raise FileNotFoundError("没有找到 web/server.py，请在 localchat 项目根目录运行本脚本。")
+    if not image_path.exists():
+        raise FileNotFoundError("没有找到 providers/image.py，请在 localchat 项目根目录运行本脚本。")
+
+    write_file(server_path, SERVER_CODE)
+    write_file(image_path, IMAGE_PROVIDER_CODE)
+    print("\n[v6.3] 启动错误已修复。现在执行：python web/server.py")
+    print("[v6.3] 如果页面还用旧 JS，请浏览器 Ctrl+F5 强制刷新。")
+
+
+if __name__ == "__main__":
+    main()
