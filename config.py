@@ -38,6 +38,18 @@ DEFAULT_CONFIG = {
             "cfg_scale": 7.0,
         }
     },
+    "voice": {
+        "tts_provider": "local",
+        "stt_provider": "local",
+        "volcengine": {
+            "app_id": "",
+            "access_token": "",
+            "api_key": "",
+            "resource_id": "seed-tts-2.0",
+            "audio_format": "mp3",
+            "voice_type": "zh_female_cancan_mars_bigtts",
+        }
+    },
 }
 
 
@@ -101,6 +113,31 @@ class Config:
     def provider(self, value):
         self.data["provider"] = value
         self.save()
+
+    def get_voice_config(self) -> dict:
+        return self.data.get("voice", {})
+
+    @property
+    def voice_tts_provider(self) -> str:
+        return self.get_voice_config().get("tts_provider", "local")
+
+    @voice_tts_provider.setter
+    def voice_tts_provider(self, value: str):
+        self.data.setdefault("voice", {})["tts_provider"] = value
+        self.save()
+
+    @property
+    def voice_stt_provider(self) -> str:
+        return self.get_voice_config().get("stt_provider", "local")
+
+    @voice_stt_provider.setter
+    def voice_stt_provider(self, value: str):
+        self.data.setdefault("voice", {})["stt_provider"] = value
+        self.save()
+
+    @property
+    def volcengine_config(self) -> dict:
+        return self.get_voice_config().get("volcengine", {})
 
     @property
     def theme(self):

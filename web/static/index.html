@@ -487,6 +487,79 @@
     <label>默认反向提示词（每次生图自动附加）</label>
     <textarea id="inputDefaultNegPrompt" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;outline:none;resize:vertical" placeholder="nsfw, low quality, distorted, deformed, blurry, bad anatomy"></textarea>
 
+    <hr style="border-color:var(--border);margin:16px 0">
+
+    <h3 style="font-size:14px;color:var(--text);margin-bottom:8px">🔊 语音设置</h3>
+
+    <label>TTS 引擎（文字转语音）</label>
+    <select id="selTtsProvider" onchange="onTtsProviderChange()">
+      <option value="local">本地 OmniVoice</option>
+      <option value="volcengine">火山引擎</option>
+    </select>
+
+    <label>STT 引擎（语音转文字）</label>
+    <select id="selSttProvider">
+      <option value="local">本地 faster-whisper</option>
+      <option value="volcengine">火山引擎</option>
+    </select>
+
+    <div id="volcengineSettings" style="display:none">
+      <label>App ID（旧版控制台）</label>
+      <input type="text" id="inputVolcAppId" placeholder="输入 App ID">
+      <label>Access Key（旧版控制台）</label>
+      <input type="password" id="inputVolcToken" placeholder="输入 Access Key">
+      <div style="text-align:center;color:var(--text-dim);font-size:12px;margin:8px 0">— 或者 —</div>
+      <label>API Key（新版控制台）</label>
+      <input type="password" id="inputVolcApiKey" placeholder="输入 API Key">
+
+      <label>Resource ID</label>
+      <input type="text" id="inputVolcResourceId" value="seed-tts-2.0" placeholder="seed-tts-2.0">
+
+      <label>默认音色</label>
+      <select id="inputVolcVoiceType">
+        <optgroup label="通用（Mars）">
+          <option value="zh_female_cancan_mars_bigtts">灿灿 Luna</option>
+          <option value="zh_female_qingxinnvsheng_mars_bigtts">清新女生 Olivia</option>
+          <option value="zh_female_linjia_mars_bigtts">邻家 Lily</option>
+          <option value="zh_male_wennuanahu_mars_bigtts">温暖大叔 Mark</option>
+          <option value="zh_male_shaonianzixin_mars_bigtts">少年自信 Ethan</option>
+          <option value="zh_male_yangguangqingnian_mars_bigtts">阳光青年 George</option>
+        </optgroup>
+        <optgroup label="有声书（Mars）">
+          <option value="zh_male_baqiqingshu_mars_bigtts">霸道总裁 Edward</option>
+          <option value="zh_female_wenroushunv_mars_bigtts">温柔淑女 Emma</option>
+          <option value="zh_female_shaoergushi_mars_bigtts">少儿故事 Tina</option>
+          <option value="zh_male_silang_mars_bigtts">四郎 William</option>
+          <option value="zh_male_jieshuonansheng_mars_bigtts">解说男声 James</option>
+        </optgroup>
+        <optgroup label="配音（Mars）">
+          <option value="zh_female_jitangmeimei_mars_bigtts">鸡汤妹妹 Grace</option>
+          <option value="zh_female_tiexinnvsheng_mars_bigtts">贴心女生 Sophia</option>
+          <option value="zh_female_qiaopinvsheng_mars_bigtts">俏皮女生 Mia</option>
+          <option value="zh_female_mengyatou_mars_bigtts">萌丫头 Ava</option>
+        </optgroup>
+        <optgroup label="趣味方言（Moon）">
+          <option value="zh_female_wanwanxiaohe_moon_bigtts">台湾腔 Isabella</option>
+          <option value="zh_male_guozhoudege_moon_bigtts">粤语 Andrew</option>
+          <option value="zh_male_jingqiangkanye_moon_bigtts">北京腔 Thomas</option>
+          <option value="zh_female_daimengchuanmei_moon_bigtts">四川话 Elena</option>
+        </optgroup>
+        <optgroup label="精品音色（Jupiter）">
+          <option value="zh_female_vv_jupiter_bigtts">vv 活泼女声</option>
+          <option value="zh_female_xiaohe_jupiter_bigtts">xiaohe 甜美台妹</option>
+          <option value="zh_male_yunzhou_jupiter_bigtts">yunzhou 清爽男声</option>
+          <option value="zh_male_xiaotian_jupiter_bigtts">xiaotian 磁性男声</option>
+        </optgroup>
+        <optgroup label="其他">
+          <option value="zh_female_xueayi_saturn_bigtts">儿童绘本</option>
+          <option value="zh_female_gaolengyujie_moon_bigtts">高冷御姐 Charlotte</option>
+          <option value="zh_female_linjianvhai_moon_bigtts">邻家女孩 Lila</option>
+          <option value="zh_male_yuanboxiaoshu_moon_bigtts">远播小数 Joseph</option>
+          <option value="zh_female_shuangkuaisisi_moon_bigtts">爽快飒姐 Aria</option>
+        </optgroup>
+      </select>
+    </div>
+
     <div class="btn-row" style="justify-content:space-between">
       <button class="btn-danger" onclick="restartServer()">重启服务</button>
       <div>
@@ -552,7 +625,7 @@
       </select>
       <button class="btn-secondary" onclick="previewTtsVoice()" style="font-size:12px;padding:4px 10px">🔈 试听</button>
     </div>
-    <span class="hint">选择本地 OmniVoice 模型的音色。</span>
+    <span class="hint">选择语音引擎的音色（在设置中切换 TTS 引擎）。</span>
 
     <div class="btn-row" style="justify-content:space-between">
       <button class="btn-danger" id="ceDeleteBtn" onclick="deleteCharacter()" style="display:none">删除角色</button>
@@ -1413,6 +1486,20 @@ async function showSettings() {
     document.getElementById('inputTemp').value = cfg.temperature;
     document.getElementById('inputDefaultPrompt').value = cfg.default_prompt || '';
     document.getElementById('inputDefaultNegPrompt').value = cfg.default_negative_prompt || '';
+
+    // Voice config
+    if (cfg.voice) {
+      document.getElementById('selTtsProvider').value = cfg.voice.tts_provider || 'local';
+      document.getElementById('selSttProvider').value = cfg.voice.stt_provider || 'local';
+      onTtsProviderChange();
+      if (cfg.voice.volcengine) {
+        document.getElementById('inputVolcAppId').value = cfg.voice.volcengine.app_id || '';
+        document.getElementById('inputVolcToken').value = cfg.voice.volcengine.access_token || '';
+        document.getElementById('inputVolcApiKey').value = cfg.voice.volcengine.api_key || '';
+        document.getElementById('inputVolcResourceId').value = cfg.voice.volcengine.resource_id || 'seed-tts-2.0';
+        document.getElementById('inputVolcVoiceType').value = cfg.voice.volcengine.voice_type || 'zh_female_cancan_mars_bigtts';
+      }
+    }
   } catch (e) { console.error('load config:', e); }
 }
 
@@ -1420,6 +1507,11 @@ function onProviderChange() {
   const v = document.getElementById('selProvider').value;
   document.getElementById('openaiSettings').style.display = v === 'openai' ? '' : 'none';
   document.getElementById('anthropicSettings').style.display = v === 'anthropic' ? '' : 'none';
+}
+
+function onTtsProviderChange() {
+  const v = document.getElementById('selTtsProvider').value;
+  document.getElementById('volcengineSettings').style.display = v === 'volcengine' ? '' : 'none';
 }
 
 async function saveSettings() {
@@ -1448,6 +1540,18 @@ async function saveSettings() {
 
   const defaultNegPrompt = document.getElementById('inputDefaultNegPrompt').value.trim();
   if (defaultNegPrompt) update.default_negative_prompt = defaultNegPrompt;
+
+  // Voice settings
+  update.tts_provider = document.getElementById('selTtsProvider').value;
+  update.stt_provider = document.getElementById('selSttProvider').value;
+  const volcAppId = document.getElementById('inputVolcAppId').value.trim();
+  if (volcAppId) update.volcengine_app_id = volcAppId;
+  const volcToken = document.getElementById('inputVolcToken').value.trim();
+  if (volcToken) update.volcengine_access_token = volcToken;
+  const volcApiKey = document.getElementById('inputVolcApiKey').value.trim();
+  if (volcApiKey) update.volcengine_api_key = volcApiKey;
+  update.volcengine_resource_id = document.getElementById('inputVolcResourceId').value.trim() || 'seed-tts-2.0';
+  update.volcengine_voice_type = document.getElementById('inputVolcVoiceType').value;
 
   try {
     await api('POST', '/api/config', update);
@@ -1921,7 +2025,12 @@ async function stopVoicePttRecording() {
         if (!r.ok) { showError('语音识别失败'); resolve(); return; }
         const j = await r.json();
         const text = (j.text || '').trim();
-        if (!text) { showError('未识别到语音'); resolve(); return; }
+        if (!text) {
+          const errMsg = j.error || '未识别到语音';
+          showError(errMsg);
+          resolve();
+          return;
+        }
         await sendVoiceMessage(text, userDuration, userAudioUrl);
       } catch (e) {
         showError('语音识别请求失败: ' + e.message);

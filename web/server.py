@@ -21,7 +21,7 @@ from providers.openai import OpenAIProvider
 from providers.anthropic import AnthropicProvider
 from providers.image import SDWebUIProvider
 from providers.base import ChatMessage
-from audio_processor import AudioProcessor, VOICE_LIST
+from audio_processor import AudioProcessor, get_voice_list
 from hashlib import md5 as hash_md5
 from datetime import datetime
 from fastapi import UploadFile, File
@@ -33,7 +33,7 @@ sessions = SessionManager()
 char_mgr = CharacterManager()
 provider: Optional[OpenAIProvider | AnthropicProvider] = None
 image_provider: Optional[SDWebUIProvider] = None
-audio_processor = AudioProcessor()
+audio_processor = AudioProcessor(voice_config=config.get_voice_config())
 
 app = FastAPI(title="Local AI Chat")
 
@@ -81,6 +81,13 @@ class ConfigUpdate(BaseModel):
     temperature: Optional[float] = None
     default_prompt: Optional[str] = None
     default_negative_prompt: Optional[str] = None
+    tts_provider: Optional[str] = None
+    stt_provider: Optional[str] = None
+    volcengine_app_id: Optional[str] = None
+    volcengine_access_token: Optional[str] = None
+    volcengine_api_key: Optional[str] = None
+    volcengine_resource_id: Optional[str] = None
+    volcengine_voice_type: Optional[str] = None
 
 class SessionRename(BaseModel):
     name: str
@@ -97,7 +104,7 @@ class CharacterData(BaseModel):
     backstory: str = ""
     speaking_style: str = ""
     greeting: str = ""
-    tts_voice: Optional[str] = None  # voice name for TTS (from VOICE_LIST)
+    tts_voice: Optional[str] = None  # voice name for TTS
 
 
 # ── API Routes ─────────────────────────────────────────────────────────────
@@ -121,6 +128,8 @@ async def get_status():
 @app.get("/api/config")
 async def get_config():
     pcfg = config.get_provider_config()
+    vcfg = config.get_voice_config()
+    vol = config.volcengine_config
     return {
         "provider": config.provider,
         "openai": {
@@ -135,6 +144,17 @@ async def get_config():
         "temperature": config.temperature,
         "default_prompt": config.image_default_prompt,
         "default_negative_prompt": config.image_default_negative_prompt,
+        "voice": {
+            "tts_provider": vcfg.get("tts_provider", "local"),
+            "stt_provider": vcfg.get("stt_provider", "local"),
+            "volcengine": {
+                "app_id": mask_key(vol.get("app_id", "")),
+                "access_token": mask_key(vol.get("access_token", "")),
+                "api_key": mask_key(vol.get("api_key", "")),
+                "resource_id": vol.get("resource_id", "seed-tts-2.0"),
+                "voice_type": vol.get("voice_type", "zh_female_cancan_mars_bigtts"),
+            }
+        }
     }
 
 
@@ -143,12 +163,16 @@ def mask_key(key: str) -> str:
         return key[:5] + "****" + key[-4:]
     return "****" if key else ""
 
+def _is_masked(val: str) -> bool:
+    """Detect if a value from the frontend is still a masked key (contains ****)."""
+    return "****" in val
+
 
 @app.post("/api/config")
 async def update_config(update: ConfigUpdate):
     if update.provider:
         config.provider = update.provider
-    if update.api_key:
+    if update.api_key and not _is_masked(update.api_key):
         cfg = config.get_provider_config()
         cfg["api_key"] = update.api_key
     if update.base_url:
@@ -166,12 +190,33 @@ async def update_config(update: ConfigUpdate):
         config.data.setdefault("image", {})["default_prompt"] = update.default_prompt
     if update.default_negative_prompt is not None:
         config.data.setdefault("image", {})["default_negative_prompt"] = update.default_negative_prompt
+
+    # Voice config
+    if update.tts_provider is not None:
+        config.data.setdefault("voice", {})["tts_provider"] = update.tts_provider
+    if update.stt_provider is not None:
+        config.data.setdefault("voice", {})["stt_provider"] = update.stt_provider
+    if update.volcengine_app_id is not None and not _is_masked(update.volcengine_app_id):
+        config.data.setdefault("voice", {}).setdefault("volcengine", {})["app_id"] = update.volcengine_app_id
+    if update.volcengine_access_token is not None and not _is_masked(update.volcengine_access_token):
+        config.data.setdefault("voice", {}).setdefault("volcengine", {})["access_token"] = update.volcengine_access_token
+    if update.volcengine_api_key is not None and not _is_masked(update.volcengine_api_key):
+        config.data.setdefault("voice", {}).setdefault("volcengine", {})["api_key"] = update.volcengine_api_key
+    if update.volcengine_resource_id is not None:
+        config.data.setdefault("voice", {}).setdefault("volcengine", {})["resource_id"] = update.volcengine_resource_id
+    if update.volcengine_voice_type is not None:
+        config.data.setdefault("voice", {}).setdefault("volcengine", {})["voice_type"] = update.volcengine_voice_type
+
     config.save()
 
     # Recreate provider on config change
     global provider
     provider = None
     get_provider()
+
+    # Refresh audio processor voice config
+    global audio_processor
+    audio_processor = AudioProcessor(voice_config=config.get_voice_config())
 
     return {"ok": True}
 
@@ -617,8 +662,10 @@ class TTSRequest(BaseModel):
 
 @app.get("/api/tts-voices")
 async def list_tts_voices():
-    """Return available TTS voice names from the local OmniVoice model."""
-    return {"voices": VOICE_LIST}
+    """Return available TTS voice names based on current provider."""
+    tts_provider = config.voice_tts_provider
+    voices = get_voice_list(tts_provider)
+    return {"voices": voices, "provider": tts_provider}
 
 
 @app.post("/api/stt")
@@ -644,14 +691,20 @@ async def text_to_speech(body: TTSRequest):
     else:
         voice = None  # use default
 
-    wav_bytes = audio_processor.synthesize(body.text, body.speed, voice=voice)
+    try:
+        audio_bytes, mime_type = audio_processor.synthesize(body.text, body.speed, voice=voice)
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"TTS 合成失败: {e}")
 
+    ext = "mp3" if "mpeg" in mime_type else "ogg" if "ogg" in mime_type else "wav"
     from fastapi.responses import Response
     return Response(
-        content=wav_bytes,
-        media_type="audio/wav",
+        content=audio_bytes,
+        media_type=mime_type,
         headers={
-            "Content-Disposition": f"inline; filename=tts_{hash_md5(body.text.encode()).hexdigest()[:12]}.wav",
+            "Content-Disposition": f"inline; filename=tts_{hash_md5(body.text.encode()).hexdigest()[:12]}.{ext}",
         },
     )
 
