@@ -346,25 +346,18 @@ async def restart_server():
 async def get_sd_meta():
     p = get_image_provider()
 
-    try:
-        models = await p.list_models()
-    except Exception:
-        models = []
+    async def safe(coro, fallback, timeout=2.0):
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except Exception:
+            return fallback
 
-    try:
-        vaes = await p.list_vaes()
-    except Exception:
-        vaes = ["None"]
-
-    try:
-        samplers = await p.list_samplers()
-    except Exception:
-        samplers = ["DPM++ 2M"]
-
-    try:
-        schedulers = await p.list_schedulers()
-    except Exception:
-        schedulers = ["Automatic"]
+    models, vaes, samplers, schedulers = await asyncio.gather(
+        safe(p.list_models(), []),
+        safe(p.list_vaes(), ["None"]),
+        safe(p.list_samplers(), ["DPM++ 2M"]),
+        safe(p.list_schedulers(), ["Automatic"]),
+    )
 
     return {
         "models": models,
