@@ -265,7 +265,7 @@ class AudioProcessor:
                     "model_name": "bigmodel",
                     "enable_itn": True,
                     "enable_punc": True,
-                    "enable_ddc": True,
+                    "enable_ddc": False,
                     "show_utterances": False,
                     "result_type": "single",
                 },
@@ -307,7 +307,8 @@ class AudioProcessor:
                 if msg_type == 0b1001:
                     text = body.get("result", {}).get("text", "")
                     if text:
-                        result_text += text
+                        # 火山引擎 ASR 每条消息都包含截至当前的完整文本，直接覆盖而非追加
+                        result_text = text
                     if body.get("result", {}).get("is_final", False):
                         break
                 elif msg_type == 0b1111:
