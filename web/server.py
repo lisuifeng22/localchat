@@ -6,6 +6,7 @@ import asyncio
 import base64
 import re
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -340,8 +341,9 @@ async def update_config(update: ConfigUpdate):
 
 @app.post("/api/restart")
 async def restart_server():
-    subprocess.Popen([sys.executable, *sys.argv])
-    raise SystemExit(0)
+    env = {**os.environ, "LOCALCHAT_RESTARTING": "1"}
+    subprocess.Popen([sys.executable, *sys.argv], env=env)
+    os._exit(0)
 
 
 @app.get("/api/sd/meta")
@@ -985,7 +987,12 @@ app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 # ── Entry Point ────────────────────────────────────────────────────────────
 def run():
+    import time
     import uvicorn
+
+    # 重启时旧进程刚退出，端口尚未释放，等 2 秒避免绑定冲突
+    if os.environ.pop("LOCALCHAT_RESTARTING", None) == "1":
+        time.sleep(2)
 
     print("[LocalChat] Local AI Chat Web UI")
     print("Open http://localhost:8000 in your browser")

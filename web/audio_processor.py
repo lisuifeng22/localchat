@@ -28,7 +28,17 @@ except ImportError:  # local OmniVoice is optional when Volcengine is used
 GENERATED_DIR = Path(__file__).resolve().parent.parent / "generated"
 
 # ── Local OmniVoice ───────────────────────────────────────────────────────────
-OMNI_VOICE_LIST = ["jok老师", "叶奈法", "我本人", "猪瘟君"]
+OMNI_VOICES_DIR = Path("D:/OmniVoice/voices")
+
+
+def _load_omni_voice_list() -> list[str]:
+    """Read voice names from .pt files in OMNI_VOICES_DIR."""
+    if OMNI_VOICES_DIR.is_dir():
+        return sorted(p.stem for p in OMNI_VOICES_DIR.glob("*.pt"))
+    return []
+
+
+OMNI_VOICE_LIST = _load_omni_voice_list()
 OMNI_DEFAULT_VOICE = OMNI_VOICE_LIST[0]
 
 # ── Volcengine TTS V3 / 豆包语音合成模型 2.0 ────────────────────────────────

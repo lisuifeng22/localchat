@@ -182,6 +182,12 @@
   .msg:not(:hover) .msg-actions .tts-btn { opacity: .5; }
   .msg .msg-actions .tts-btn:hover { opacity: 1; }
 
+  /* LOCALCHAT_TEXT_CHAT_TTS_PATCH: normal text messages can also be read aloud */
+  .msg .msg-actions .tts-btn { min-width: 28px; font-weight: 600; }
+  .msg .msg-actions .tts-btn.loading { pointer-events: none; opacity: .65; }
+  .msg .msg-actions .tts-btn.playing { color: var(--primary); border-color: var(--primary); }
+
+
   /* Inline edit */
   .msg .edit-box { display: flex; flex-direction: column; gap: 6px; }
   .msg .edit-box textarea {
@@ -749,6 +755,12 @@ let voicePttRecorder = null;
 let voicePttChunks = [];
 let currentVoiceEl = null;
 
+// LOCALCHAT_TEXT_CHAT_TTS_PATCH: text-chat TTS playback state
+let currentTextTtsAudio = null;
+let currentTextTtsUrl = null;
+let currentTextTtsButton = null;
+
+
 // ── API Helpers ────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   const opts = { method, headers: {} };
@@ -770,6 +782,14 @@ async function init() {
   await loadSessions();
   await loadCurrentSession();
   updateFooterMode();
+  const msgContainer = document.getElementById('messages');
+  if (msgContainer) {
+    const welcome = document.createElement('div');
+    welcome.style.cssText = 'color:var(--text-dim);text-align:center;padding:16px;font-size:13px';
+    welcome.textContent = '👋 欢迎回来！';
+    msgContainer.appendChild(welcome);
+    setTimeout(() => scrollToBottom(), 50);
+  }
 }
 init();
 
@@ -880,6 +900,56 @@ function renderMessages(messages) {
   scrollToBottom();
 }
 
+
+function ensureAssistantActions(msgEl) {
+  if (!msgEl || !msgEl.classList || !msgEl.classList.contains('assistant')) return;
+
+  let actions = msgEl.querySelector('.msg-actions');
+  if (!actions) {
+    actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    msgEl.appendChild(actions);
+  }
+
+  const hasRegen = Array.from(actions.querySelectorAll('button')).some(btn => btn.title === '重新生成回答');
+  if (!hasRegen) {
+    const regenBtn = document.createElement('button');
+    regenBtn.textContent = '重新生成';
+    regenBtn.title = '重新生成回答';
+    regenBtn.onclick = (e) => { e.stopPropagation(); regenerateMessage(msgEl); };
+    actions.appendChild(regenBtn);
+  }
+
+  if (!actions.querySelector('.tts-btn')) {
+    const ttsBtn = document.createElement('button');
+    ttsBtn.className = 'tts-btn';
+    ttsBtn.textContent = '';
+    ttsBtn.title = '语音播放';
+    ttsBtn.onclick = (e) => { e.stopPropagation(); playTTS(msgEl); };
+    actions.appendChild(ttsBtn);
+  }
+}
+
+function ensureMessageTtsButton(actions, msgEl, role, isStreaming) {
+  if (isStreaming) return;
+  if (!msgEl || !actions) return;
+  const bubble = msgEl.querySelector('.bubble');
+  if (!bubble) return;
+
+  let btn = actions.querySelector('.tts-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.className = 'tts-btn';
+    actions.appendChild(btn);
+  }
+  if (!btn.textContent || !btn.textContent.trim()) btn.textContent = '🔊';
+  btn.title = '语音播放';
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    playTTS(msgEl);
+  };
+}
+
 function createMessageEl(role, content, isStreaming) {
   const div = document.createElement('div');
   div.className = `msg ${role}` + (isStreaming ? ' streaming' : '');
@@ -938,6 +1008,7 @@ function createMessageEl(role, content, isStreaming) {
     ttsBtn.onclick = (e) => { e.stopPropagation(); playTTS(div); };
     actions.appendChild(ttsBtn);
   }
+  ensureMessageTtsButton(actions, div, role, isStreaming);
   div.appendChild(actions);
 
   return div;
@@ -967,25 +1038,14 @@ function appendMessage(role, content, isStreaming) {
 function finalizeStreaming() {
   const container = document.getElementById('messages');
   const last = container.lastElementChild;
+
   if (last && last.classList.contains('streaming')) {
     last.classList.remove('streaming');
-    // Add regenerate button after streaming completes
-    const existing = last.querySelector('.msg-actions');
-    if (!existing) {
-      const actions = document.createElement('div');
-      actions.className = 'msg-actions';
-      const regenBtn = document.createElement('button');
-      regenBtn.textContent = '🔄 重新生成';
-      regenBtn.title = '重新生成回答';
-      regenBtn.onclick = (e) => { e.stopPropagation(); regenerateMessage(last); };
-      actions.appendChild(regenBtn);
-      const ttsBtn = document.createElement('button');
-      ttsBtn.className = 'tts-btn';
-      ttsBtn.textContent = '🔊';
-      ttsBtn.title = '语音播放';
-      ttsBtn.onclick = (e) => { e.stopPropagation(); playTTS(last); };
-      actions.appendChild(ttsBtn);
-      last.appendChild(actions);
+
+    // 修复点：流式消息创建时可能已经存在空的 .msg-actions，
+    // 不能只判断容器是否存在，而要确保按钮本身存在。
+    if (last.classList.contains('assistant')) {
+      ensureAssistantActions(last);
     }
   }
 }
@@ -2297,10 +2357,29 @@ function escapeHtml(s) {
 
   window.restartServer = window.restartServer || async function restartServer() {
     if (!confirm('确定要重启服务吗？')) return;
+    const settingsModal = document.getElementById('settingsModal');
+    if (settingsModal) settingsModal.classList.remove('show');
+    const msgContainer = document.getElementById('messages');
+    const tip = document.createElement('div');
+    tip.style.cssText = 'color:var(--text-dim);text-align:center;padding:16px;font-size:13px';
+    tip.textContent = '⏳ 服务正在重启，页面将在几秒后恢复...';
+    msgContainer.appendChild(tip);
+    scrollToBottom();
     try {
       await api('POST', '/api/restart');
     } catch (e) {
       // 服务重启时连接被断开是正常现象。
+    }
+    // 等待服务恢复后自动刷新
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        const r = await fetch('/api/status');
+        if (r.ok) {
+          location.reload();
+          return;
+        }
+      } catch (_) {}
     }
   };
 
