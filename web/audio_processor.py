@@ -28,7 +28,7 @@ except ImportError:  # local OmniVoice is optional when Volcengine is used
 GENERATED_DIR = Path(__file__).resolve().parent.parent / "generated"
 
 # ── Local OmniVoice ───────────────────────────────────────────────────────────
-OMNI_VOICE_LIST = ["jok老师", "叶奈法"]
+OMNI_VOICE_LIST = ["jok老师", "叶奈法", "我本人", "猪瘟君"]
 OMNI_DEFAULT_VOICE = OMNI_VOICE_LIST[0]
 
 # ── Volcengine TTS V3 / 豆包语音合成模型 2.0 ────────────────────────────────

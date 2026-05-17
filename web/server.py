@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import re
 import json
 import subprocess
 import sys
@@ -16,7 +18,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -789,6 +791,182 @@ async def text_to_speech(body: TTSRequest):
         },
     )
 
+
+
+# ── Voice Call WebSocket Patch: LOCALCHAT_VOICE_CALL_WS_PATCH ───────────────
+
+# ── Voice Call STT Repeat Fix: LOCALCHAT_VOICE_REPEAT_FIX ──────────────────
+def _collapse_repeated_stt_text(text: str) -> str:
+    """Collapse obvious ASR hallucinated repetitions in short utterances.
+
+    faster-whisper may decode a very short utterance plus trailing silence as
+    repeated text, e.g. "你好你好你好" or "你好， 你好， 你好".
+    This function is intentionally conservative: it mainly handles adjacent
+    exact repeats and does not rewrite normal long sentences aggressively.
+    """
+    if not text:
+        return ""
+
+    text = re.sub(r"\s+", " ", str(text)).strip()
+    text = re.sub(r"([，,。.!！?？、])\1+", r"\1", text)
+
+    # Collapse separated adjacent repeats: 你好， 你好， 你好 -> 你好
+    repeat_pattern = re.compile(
+        r"(?P<seg>[\u4e00-\u9fffA-Za-z0-9]{2,16})"
+        r"(?:[，,。.!！?？、\s]*(?P=seg)){1,}"
+    )
+    for _ in range(4):
+        new_text = repeat_pattern.sub(r"\g<seg>", text)
+        if new_text == text:
+            break
+        text = new_text.strip()
+
+    # Collapse fully repeated compact short strings: 你好你好你好 -> 你好
+    compact = re.sub(r"[，,。.!！?？、\s]+", "", text)
+    if 4 <= len(compact) <= 48:
+        max_unit = min(16, len(compact) // 2)
+        for unit_len in range(2, max_unit + 1):
+            if len(compact) % unit_len == 0:
+                unit = compact[:unit_len]
+                if unit * (len(compact) // unit_len) == compact:
+                    return unit.strip()
+
+    # Collapse repeated English words: hello hello hello -> hello
+    text = re.sub(r"\b([A-Za-z0-9]{2,})\b(?:\s+\1\b){1,}", r"\1", text, flags=re.IGNORECASE)
+    return text.strip()
+
+@app.websocket("/ws/voice-call")
+async def voice_call(ws: WebSocket):
+    """One-turn-at-a-time voice call channel.
+
+    Browser sends one recorded utterance as base64 audio. Server performs:
+    STT -> chat_stream -> TTS, then returns text deltas and synthesized audio.
+    """
+    await ws.accept()
+
+    try:
+        while True:
+            data = await ws.receive_json()
+            event_type = data.get("type")
+
+            if event_type == "ping":
+                await ws.send_json({"type": "pong"})
+                continue
+
+            if event_type != "audio_turn":
+                await ws.send_json({
+                    "type": "error",
+                    "message": f"未知事件类型: {event_type}",
+                })
+                continue
+
+            audio_b64 = data.get("audio")
+            if not audio_b64:
+                await ws.send_json({"type": "error", "message": "缺少音频数据"})
+                continue
+
+            await ws.send_json({"type": "status", "message": "正在识别..."})
+
+            try:
+                audio_bytes = base64.b64decode(audio_b64)
+            except Exception:
+                await ws.send_json({"type": "error", "message": "音频 base64 解码失败"})
+                continue
+
+            try:
+                stt_result = await asyncio.to_thread(audio_processor.transcribe, audio_bytes)
+            except Exception as e:
+                await ws.send_json({"type": "error", "message": f"STT 识别失败: {e}"})
+                continue
+
+            raw_user_text = (stt_result.get("text") or "").strip() if isinstance(stt_result, dict) else ""
+            user_text = _collapse_repeated_stt_text(raw_user_text)
+            if not user_text:
+                err = stt_result.get("error") if isinstance(stt_result, dict) else None
+                await ws.send_json({"type": "error", "message": err or "没有识别到有效语音"})
+                continue
+
+            await ws.send_json({"type": "user_text", "text": user_text})
+
+            if not sessions.current:
+                sessions.new_session()
+
+            sessions.current.add_message("user", user_text)
+            sessions.save_current()
+
+            await ws.send_json({"type": "status", "message": "AI 正在回复..."})
+
+            p = get_provider()
+            if not p:
+                await ws.send_json({"type": "error", "message": "模型 Provider 未配置"})
+                continue
+
+            context = sessions.get_context_messages(char_mgr.get_system_prompt_extra())
+            full_response = ""
+
+            try:
+                async for chunk in p.chat_stream(
+                    context,
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                ):
+                    if chunk.startswith("\n[ERROR]"):
+                        await ws.send_json({
+                            "type": "error",
+                            "message": chunk.replace("\n[ERROR]", "").strip(),
+                        })
+                        break
+
+                    full_response += chunk
+                    await ws.send_json({"type": "assistant_delta", "text": chunk})
+            except Exception as e:
+                await ws.send_json({"type": "error", "message": f"AI 回复失败: {e}"})
+                continue
+
+            full_response = full_response.strip()
+            if not full_response:
+                continue
+
+            sessions.current.add_message("assistant", full_response)
+            sessions.save_current()
+
+            await ws.send_json({"type": "assistant_text", "text": full_response})
+            await ws.send_json({"type": "status", "message": "正在合成语音..."})
+
+            char_name = sessions.character
+            if char_name and char_mgr.active and char_mgr.active.tts_voice is not None:
+                voice = char_mgr.active.tts_voice
+            else:
+                voice = None
+
+            try:
+                audio_out, mime_type = await asyncio.to_thread(
+                    audio_processor.synthesize,
+                    full_response,
+                    1.0,
+                    voice=voice,
+                )
+            except RuntimeError as e:
+                await ws.send_json({"type": "error", "message": str(e)})
+                continue
+            except Exception as e:
+                await ws.send_json({"type": "error", "message": f"TTS 合成失败: {e}"})
+                continue
+
+            await ws.send_json({
+                "type": "assistant_audio",
+                "mime_type": mime_type,
+                "audio": base64.b64encode(audio_out).decode("utf-8"),
+            })
+            await ws.send_json({"type": "done"})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await ws.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
 
 # ── Static Files ───────────────────────────────────────────────────────────
 static_dir = Path(__file__).parent / "static"

@@ -2319,6 +2319,290 @@ function escapeHtml(s) {
   }
 })();
 // LOCALCHAT_SETTINGS_SAVE_FIX_V5_END
+
+// ── Voice Call Frontend Patch: LOCALCHAT_VOICE_CALL_FRONTEND_PATCH ──────────
+let voiceSocket = null;
+let voiceAssistantBuffer = '';
+// LOCALCHAT_VOICE_REPEAT_FRONTEND_FIX: prevent duplicate turn submission
+let voiceCallSending = false;
+let voiceLastSendAt = 0;
+
+function getVoiceSocket() {
+  if (voiceSocket && (voiceSocket.readyState === WebSocket.OPEN || voiceSocket.readyState === WebSocket.CONNECTING)) {
+    return voiceSocket;
+  }
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  voiceSocket = new WebSocket(`${protocol}//${location.host}/ws/voice-call`);
+
+  voiceSocket.onopen = () => {
+    console.log('[voice-call] websocket connected');
+  };
+
+  voiceSocket.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleVoiceCallMessage(data);
+    } catch (e) {
+      console.error('[voice-call] bad message:', event.data, e);
+    }
+  };
+
+  voiceSocket.onerror = (e) => {
+    console.error('[voice-call] websocket error:', e);
+  };
+
+  voiceSocket.onclose = () => {
+    console.log('[voice-call] websocket closed');
+  };
+
+  return voiceSocket;
+}
+
+function handleVoiceCallMessage(data) {
+  if (data.type === 'status') {
+    console.log('[voice-call]', data.message);
+    return;
+  }
+
+  if (data.type === 'user_text') {
+    voiceAssistantBuffer = '';
+    appendMessage('user', data.text || '', false);
+    return;
+  }
+
+  if (data.type === 'assistant_delta') {
+    voiceAssistantBuffer += data.text || '';
+    appendMessage('assistant', voiceAssistantBuffer, true);
+    return;
+  }
+
+  if (data.type === 'assistant_text') {
+    if (!voiceAssistantBuffer && data.text) {
+      voiceAssistantBuffer = data.text;
+      appendMessage('assistant', voiceAssistantBuffer, true);
+    }
+    finalizeStreaming();
+    return;
+  }
+
+  if (data.type === 'assistant_audio') {
+    if (data.audio) {
+      playBase64Audio(data.audio, data.mime_type || 'audio/mpeg');
+    }
+    return;
+  }
+
+  if (data.type === 'error') {
+    console.error('[voice-call error]', data.message);
+    alert(data.message || '语音通话失败');
+    finalizeStreaming();
+    streaming = false;
+    voiceCallSending = false;
+    return;
+  }
+
+  if (data.type === 'done') {
+    finalizeStreaming();
+    streaming = false;
+    voiceCallSending = false;
+    loadSessions?.();
+  }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function playBase64Audio(base64Audio, mimeType) {
+  stopAudio();
+
+  const binary = atob(base64Audio);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const blob = new Blob([bytes], { type: mimeType || 'audio/mpeg' });
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+
+  currentVoiceEl = audio;
+
+  audio.onended = () => {
+    URL.revokeObjectURL(url);
+    currentVoiceEl = null;
+  };
+
+  audio.onerror = () => {
+    URL.revokeObjectURL(url);
+    currentVoiceEl = null;
+    console.error('[voice-call] audio play error');
+  };
+
+  audio.play().catch(err => {
+    URL.revokeObjectURL(url);
+    currentVoiceEl = null;
+    console.error('[voice-call] audio play failed:', err);
+  });
+}
+
+function stopAudio() {
+  if (currentVoiceEl) {
+    try {
+      currentVoiceEl.pause();
+      currentVoiceEl.currentTime = 0;
+    } catch (e) {
+      console.warn('[voice-call] stopAudio warning:', e);
+    }
+    currentVoiceEl = null;
+  }
+}
+
+async function voicePttDown(event) {
+  if (event) event.preventDefault();
+
+  if (streaming || voicePttRecording) return;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持麦克风录音，请使用新版 Chrome 或 Edge');
+    return;
+  }
+
+  if (typeof MediaRecorder === 'undefined') {
+    alert('当前浏览器不支持 MediaRecorder，请使用新版 Chrome 或 Edge');
+    return;
+  }
+
+  stopAudio();
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    voicePttChunks = [];
+
+    const options = {};
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      options.mimeType = 'audio/webm;codecs=opus';
+    } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) {
+      options.mimeType = 'audio/webm';
+    }
+
+    voicePttRecorder = new MediaRecorder(stream, options);
+
+    voicePttRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        voicePttChunks.push(e.data);
+      }
+    };
+
+    voicePttRecorder.onstop = async () => {
+      stream.getTracks().forEach(track => track.stop());
+
+      const mimeType = voicePttRecorder.mimeType || options.mimeType || 'audio/webm';
+      const blob = new Blob(voicePttChunks, { type: mimeType });
+      await sendVoiceTurn(blob);
+    };
+
+    voicePttRecorder.start();
+    voicePttRecording = true;
+    voicePttStartTime = Date.now();
+
+    const btn = document.getElementById('voicePttBtn');
+    if (btn) btn.classList.add('recording');
+
+    const timer = document.getElementById('voicePttTimer');
+    if (timer) timer.textContent = '0s';
+
+    voicePttTimer = setInterval(() => {
+      const sec = Math.floor((Date.now() - voicePttStartTime) / 1000);
+      const timerEl = document.getElementById('voicePttTimer');
+      if (timerEl) timerEl.textContent = `${sec}s`;
+    }, 200);
+
+  } catch (e) {
+    console.error('[voice-call] microphone error:', e);
+    alert('无法访问麦克风，请检查浏览器麦克风权限');
+  }
+}
+
+function voicePttUp(event) {
+  if (event) event.preventDefault();
+
+  if (!voicePttRecording || !voicePttRecorder) return;
+
+  voicePttRecording = false;
+
+  if (voicePttTimer) {
+    clearInterval(voicePttTimer);
+    voicePttTimer = null;
+  }
+
+  const btn = document.getElementById('voicePttBtn');
+  if (btn) btn.classList.remove('recording');
+
+  const timer = document.getElementById('voicePttTimer');
+  if (timer) timer.textContent = '0s';
+
+  if (voicePttRecorder.state !== 'inactive') {
+    voicePttRecorder.stop();
+  }
+}
+
+async function sendVoiceTurn(blob) {
+  if (!blob || blob.size < 800) {
+    console.warn('[voice-call] recording too short, ignored');
+    return;
+  }
+
+  const now = Date.now();
+  if (voiceCallSending || (now - voiceLastSendAt) < 700) {
+    console.warn('[voice-call] duplicate recording ignored');
+    return;
+  }
+  voiceCallSending = true;
+  voiceLastSendAt = now;
+
+  streaming = true;
+  voiceAssistantBuffer = '';
+
+  try {
+    const socket = getVoiceSocket();
+    const audioBase64 = await blobToBase64(blob);
+
+    const payload = JSON.stringify({
+      type: 'audio_turn',
+      mime_type: blob.type || 'audio/webm',
+      audio: audioBase64,
+    });
+
+    const sendPayload = () => socket.send(payload);
+
+    if (socket.readyState === WebSocket.OPEN) {
+      sendPayload();
+    } else if (socket.readyState === WebSocket.CONNECTING) {
+      socket.addEventListener('open', sendPayload, { once: true });
+    } else {
+      throw new Error('WebSocket 未连接');
+    }
+  } catch (e) {
+    streaming = false;
+    voiceCallSending = false;
+    console.error('[voice-call] send failed:', e);
+    alert(`发送语音失败: ${e.message || e}`);
+  }
+}
+
 </script>
 </body>
 </html>
