@@ -748,7 +748,17 @@ async def draw_image(body: DrawRequest):
     if body.clip_skip is not None:
         kwargs["clip_skip"] = body.clip_skip
 
-    return await _generate_image(prompt, **kwargs)
+    result = await _generate_image(prompt, **kwargs)
+
+    # 保存到会话，刷新后图片消息不丢失
+    if sessions.current:
+        md = f"![Generated Image]({result['url']})\n\n**Prompt:** {result['prompt']}"
+        if result.get("enhanced_prompt") and result["enhanced_prompt"] != result["prompt"]:
+            md += f"\n\n> ✨ {result['enhanced_prompt']}"
+        sessions.current.add_message("assistant", md)
+        sessions.save_current()
+
+    return result
 
 
 # ── Voice Routes ───────────────────────────────────────────────────────────
